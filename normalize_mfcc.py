@@ -12,8 +12,8 @@ def normalize(folder):
     corpus = {}
     full = np.ndarray((0,39))
 
+    foldername = folder.rstrip('/').strip('/') + '/'
     for d, ds, fs in os.walk(folder):
-        foldername = folder.rstrip('/').strip('/') + '/'
         for fname in fs:
             if fname[-11:] != '.mfc_unnorm':
                 continue

@@ -40,8 +40,8 @@ For all file.wav wav files in the dataset, what this script does is eqvlt to:
 def process(folder, 
         debug=False, htk_mfc=False, stereo_wav=False, gammatones=False):
     """ debug output? HCopy for MFCC? wav are stereo? produce gammatones? """
+    fdname = folder.strip('/').rstrip('/') + '/'
     for d, ds, fs in os.walk(folder):
-        fdname = folder.strip('/').rstrip('/') + '/'
         for fname in fs:
             if fname[-4:] != '.wav':
                 continue
