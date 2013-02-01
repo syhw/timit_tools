@@ -39,8 +39,6 @@ def pad(a):
 
 
 def extract(folder):
-    #x = np.ndarray((0, N_MFCC_COEFFS * N_FRAMES))
-    #y = np.array([])
     x = []
     y = []
 
@@ -56,13 +54,6 @@ def extract(folder):
             for line in phonef:
                 start_s, end_s, phone = line.rstrip('\n').split()
                 start, end = start_end(start_s, end_s, len(tmp_mfc))
-                #print start
-                #print end
-                #print len(tmp_mfc[start:end])
-                #print x.shape
-                #x = np.append(x, np.array([pad(tmp_mfc[start:end].flatten())]),
-                #        axis=0)
-                #y = np.append(y, phone)
                 x.append(pad(tmp_mfc[start:end].flatten()))
                 y.append(phone)
             phonef.close()
