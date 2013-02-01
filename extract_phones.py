@@ -71,8 +71,8 @@ def extract(folder):
     xx = np.array(x)
     yy = np.array(y)
 
-    np.save(name+'.xdata', xx)
-    np.save(name+'.ylabels', yy)
+    np.save(name+'_xdata', xx)
+    np.save(name+'_ylabels', yy)
 
 
 if __name__ == '__main__':
