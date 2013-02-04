@@ -10,6 +10,7 @@ SAMPLING_RATE = 16000 # Hz
 MFCC_TIMESTEP = 10 # 10 ms
 N_FRAMES = 11 # as in Mohamed et al. / Dahl et al. (Hinton group) papers
 N_MFCC_COEFFS = 39 # as in Mohamed et al. / Dahl et al. (Hinton group) papers
+TEST = True # test numpy serialization
 
 usage = """
       python extract_phones.py [folder]
@@ -73,6 +74,14 @@ def extract(folder):
 
     np.save(name+'_xdata', xx)
     np.save(name+'_ylabels', yy)
+
+    if TEST:
+        tx = np.load(name+'_xdata.npy')
+        ty = np.load(name+'_ylabels.npy')
+        if np.all(tx==xx) and np.all(ty==yy):
+            print "SUCCESS: serialized and current in-memory arrays are equal"
+        else:
+            print "ERROR: serialized and current in-memory arrays differ!"
 
 
 if __name__ == '__main__':
