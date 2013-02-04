@@ -65,7 +65,7 @@ def extract(folder):
             phonef.close()
             print "Dealt with:", fname
 
-    xx = np.array(x)
+    xx = np.array(x, 'float32')
     yy = np.array(y)
     print "length x:", len(x), " length y:", len(y)
     print "shape xx:", xx.shape, "shape yy:", yy.shape 
