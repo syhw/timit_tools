@@ -37,7 +37,7 @@ def pad(a):
     if len(a) < N_MFCC_COEFFS * N_FRAMES:
         # we transform [1,2,3] in [0,...x...,0,1,2,3,0,...y...,0] with x <= y
         ret = np.zeros(N_MFCC_COEFFS * N_FRAMES)
-        pad_size = (N_MFCC_COEFFS - len(a))/2 
+        pad_size = (N_MFCC_COEFFS * N_FRAMES - len(a))/2 
         ret[pad_size:pad_size+len(a)] = a
         return ret
     return a
@@ -53,7 +53,7 @@ def extract(folder):
             if fname[-8:] != '_mfc.npy':
                 continue
             mfcfname = d+'/'+fname
-            tmp_mfc = np.fromfile(mfcfname)
+            tmp_mfc = np.load(mfcfname)
             phonefname = mfcfname[:-8]+'.phn'
             phonef = open(phonefname)
             for line in phonef:
@@ -68,6 +68,8 @@ def extract(folder):
     yy = np.array(y)
     print "length x:", len(x), " length y:", len(y)
     print "shape xx:", xx.shape, "shape yy:", yy.shape 
+    print xx
+    print yy
 
     np.save(name+'_xdata', xx)
     np.save(name+'_ylabels', yy)
