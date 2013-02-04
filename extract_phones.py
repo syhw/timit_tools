@@ -11,10 +11,15 @@ MFCC_TIMESTEP = 10 # 10 ms
 N_FRAMES = 11 # as in Mohamed et al. / Dahl et al. (Hinton group) papers
 N_MFCC_COEFFS = 39 # as in Mohamed et al. / Dahl et al. (Hinton group) papers
 
+usage = """
+      python extract_phones.py [folder]
+    if folder is ommited, will use .
+    output files are [folder]_xdata.npy and [folder]_ylabels.npy
+    """
 
 def start_end(start_str, end_str, len_mfc):
-    """ Centering of the MFCC that we will take on the middle of the phone """
-    """ "First we did a forced-alignment using HVite tool from HTK (with -a -f options as far as i remember) to produce state level alignment. Then we moved a window over the input and use the state label of the middle input frame as the label of the whole window." Abdel-rahman Mohamed """
+    """ Centering of the MFCC that we will take on the middle of the phone
+        "First we did a forced-alignment using HVite tool from HTK (with -a -f options as far as i remember) to produce state level alignment. Then we moved a window over the input and use the state label of the middle input frame as the label of the whole window." Abdel-rahman Mohamed """
     start = 1000 * float(start_str) / SAMPLING_RATE # now in milli seconds
     end = 1000 * float(end_str) / SAMPLING_RATE # now in milli seconds
     duration = end - start
@@ -61,6 +66,8 @@ def extract(folder):
 
     xx = np.array(x)
     yy = np.array(y)
+    print "length x:", len(x), " length y:", len(y)
+    print "shape xx:", xx.shape, "shape yy:", yy.shape 
 
     np.save(name+'_xdata', xx)
     np.save(name+'_ylabels', yy)
@@ -69,6 +76,9 @@ def extract(folder):
 if __name__ == '__main__':
     folder = '.'
     if len(sys.argv) > 1:
+        if sys.argv[1] == '-h':
+            print usage
+            sys.exit(0)
         folder = sys.argv[1]
     print "Producing a (x, y) dataset file for folder:", folder
     print "WARNING: only the first 39 MFCC coefficients will be taken into account"
