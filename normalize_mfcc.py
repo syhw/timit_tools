@@ -16,7 +16,7 @@ def normalize(folder):
         for fname in fs:
             if fname[-11:] != '.mfc_unnorm':
                 continue
-            fullfname = foldername+d+'/'+fname
+            fullfname = d + '/'+fname
             t = htkmfc.open(fullfname)
             corpus[fullfname[:-11]+'_mfc.npy'] = copy.deepcopy(t.getall())
             full = np.append(full, t.getall(), axis=0)
