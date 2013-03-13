@@ -40,16 +40,28 @@ For all file.wav wav files in the dataset, what this script does is eqvlt to:
 def process(folder, 
         debug=False, htk_mfc=False, stereo_wav=False, gammatones=False):
     """ debug output? HCopy for MFCC? wav are stereo? produce gammatones? """
-    fdname = folder.strip('/').rstrip('/') + '/'
+
+    # first find if we produce normalized MFCC, otherwise note it in the ext
+    # because we can then normalize on the whole corpus with another py script
+    mfc_extension = '.mfc_unnorm'
+    wcfg = open('wav_config', 'r')
+    for line in wcfg:
+        if "ENORMALISE" in line:
+            mfc_extension = '.mfc'
+    print "MFC extension:", mfc_extension
+
+    # run through all the folders and files in the path "folder"
+    # and put a header to the waves, save the originals as .rawaudio
+    # use HCopy to produce MFCC files according to "wav_config" file
     for d, ds, fs in os.walk(folder):
         for fname in fs:
             if fname[-4:] != '.wav':
                 continue
-            rawfname = fdname+d+'/'+fname[:-4]+'.rawaudio'
-            wavfname = fdname+d+'/'+fname
-            tempfname = fdname+d+'/'+fname[:-4]+'_temp.wav' # temp fname with .wav for sox
-            mfccfname = fdname+d+'/'+fname[:-4]+'.mfc_unnorm'
-            gammatonefname = fdname+d+'/'+fname[:-4]+'_gamma_unnorm.npy'
+            rawfname = d+'/'+fname[:-4]+'.rawaudio'
+            wavfname = d+'/'+fname
+            tempfname = d+'/'+fname[:-4]+'_temp.wav' # temp fname with .wav for sox
+            mfccfname = d+'/'+fname[:-4]+mfc_extension
+            gammatonefname = d+'/'+fname[:-4]+'_gamma_unnorm.npy'
             shutil.move(wavfname, tempfname)
             call(['sox', tempfname, wavfname]) # w/o headers, sox uses extension
             shutil.move(tempfname, rawfname)
