@@ -4,3 +4,5 @@ With the TIMIT dataset:
 files with HCopy according to `wav_config` (`.mfc_unnorm` is no normalization)
  2) run `python timit_to_htk_labels.py $DATASET/train` and  
 `python timit_to_htk_labels.py $DATASET/test` producing the `.lab` files
+
+You're ready for training with HTK (mfc and lab files)!
