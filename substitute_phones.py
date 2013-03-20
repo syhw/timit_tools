@@ -32,12 +32,15 @@ foldings = {'ux': 'uw',
             'h#': 'sil',
             '#h': 'sil',
             'pau': 'sil',
+            'epi': 'sil',
+            'axh': 'ax',
             'el': 'l',
             'en': 'n',
             'sh': 'zh',
             'ao': 'aa',
             'ih': 'ix',
-            'ah': 'ax'}
+            'ah': 'ax',
+            'q': 'sil'} # <- they removed 'Q' (glottal stop), is it ok to sil?
 
 def process(folder, sentences=False):
     c_before = Counter()
@@ -62,8 +65,11 @@ def process(folder, sentences=False):
                     else:
                         tmpline = tmpline.replace('h#', '</s>')
                 tmpline = tmpline.replace('-', '')
+                tmp = tmpline.split()
                 for k, v in foldings.iteritems():
-                    tmpline = tmpline.replace(k, v)
+                    if tmp[2] == k:
+                        tmp[2] = v
+                        tmpline = ' '.join(tmp) + '\n'
                 fw.write(tmpline)
                 phones_after.append(tmpline.split()[2])
                 if 'h#' in line:

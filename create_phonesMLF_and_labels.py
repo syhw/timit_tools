@@ -43,7 +43,8 @@ def process(folder):
         labels_file.write(label + '\n')
     labels_file.close()
     print "written labels dict", labels_fname
-    print c
+    print "phones counts:", c
+    print "number of phones:", len(c)
 
 
 if __name__ == '__main__':
