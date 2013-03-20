@@ -21,6 +21,7 @@ Copyright: Gabriel Synnaeve 2013
 doc = """
 Usage:
     python mfcc_and_gammatones.py [$folder_path] [--debug] [--htk_mfcc] 
+        [--gammatones] [--stereo]
 
 You may need:
     - GammaTones.py http://work.thaslwanter.at/CSS/Code/GammaTones.py
@@ -104,7 +105,7 @@ if __name__ == '__main__':
             debug = True
         if '--htk_mfcc' in sys.argv:
             htk_mfcc = True
-        if '--stero' in sys.argv:
+        if '--stereo' in sys.argv:
             stereo = True
         if '--gammatones' in sys.argv:
             gammatones = True
