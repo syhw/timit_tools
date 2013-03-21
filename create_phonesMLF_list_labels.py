@@ -10,7 +10,7 @@ doc = """
 Usage:
     python create_phonesMLF_and_labels.py [$folder_path]
 
-Will create "phones0.mlf" and "labels" file in $folder_path. 
+Will create "phones0.mlf", "${folder}.scp", and "labels" file in $folder_path.
 
 If you run it only on the training folder, all the phones that you will
 encounter in the test should be present in training so that the "labels" 
@@ -18,16 +18,21 @@ corresponds.
 """
 
 def process(folder):
+    folder = folder.rstrip('/')
     c = Counter()
-    master_label_fname = folder.rstrip('/') + '/phones0.mlf'
-    labels_fname = folder.rstrip('/') + '/labels'
+    mfc_list_fname = folder + '/' + folder.split('/')[-1] + '.scp'
+    master_label_fname = folder + '/phones0.mlf'
+    labels_fname = folder + '/labels'
+    mfc_list_file = open(mfc_list_fname, 'w')
     master_label_file = open(master_label_fname, 'w')
     labels_file = open(labels_fname, 'w')
     for d, ds, fs in os.walk(folder):
         for fname in fs:
+            fullname = d.rstrip('/') + '/' + fname
+            if fname[-4:] == '.mfc': # TODO .mfc_unnorm also
+                mfc_list_file.write(fullname + '\n')
             if fname[-4:] != '.lab':
                 continue
-            fullname = d.rstrip('/') + '/' + fname
             master_label_file.write('"' + fullname + '"\n')
             phones = []
             for line in open(fullname):
@@ -36,6 +41,8 @@ def process(folder):
             c.update(phones)
             master_label_file.write('.\n')
             print "dealt with", fullname 
+    mfc_list_file.close()
+    print "written SCP file", mfc_list_fname
     master_label_file.close()
     print "written MLF file", master_label_fname
     labels_file = open(labels_fname, 'w')

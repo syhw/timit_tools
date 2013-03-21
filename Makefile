@@ -6,8 +6,8 @@ prepare: wav_config mfcc_and_gammatones.py timit_to_htk_labels.py
 	python timit_to_htk_labels.py $(dataset)/test
 	python substitute_phones.py $(dataset)/train
 	python substitute_phones.py $(dataset)/test
-	python create_phonesMLF_and_labels.py $(dataset)/train
-	python create_phonesMLF_and_labels.py $(dataset)/test
+	python create_phonesMLF_list_labels.py $(dataset)/train
+	python create_phonesMLF_list_labels.py $(dataset)/test
 
 train:
 	@echo ">>> training the HMMs with HTK"
