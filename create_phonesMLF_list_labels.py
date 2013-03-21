@@ -10,7 +10,7 @@ doc = """
 Usage:
     python create_phonesMLF_and_labels.py [$folder_path]
 
-Will create "phones0.mlf", "${folder}.scp", and "labels" file in $folder_path.
+Will create "${folder}.mlf", "${folder}.scp", "labels" files in $folder_path.
 
 If you run it only on the training folder, all the phones that you will
 encounter in the test should be present in training so that the "labels" 
@@ -21,7 +21,7 @@ def process(folder):
     folder = folder.rstrip('/')
     c = Counter()
     mfc_list_fname = folder + '/' + folder.split('/')[-1] + '.scp'
-    master_label_fname = folder + '/phones0.mlf'
+    master_label_fname = folder + '/' + folder.split('/')[-1] + '.mlf'
     labels_fname = folder + '/labels'
     mfc_list_file = open(mfc_list_fname, 'w')
     master_label_file = open(master_label_fname, 'w')
