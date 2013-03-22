@@ -25,6 +25,7 @@ def process(folder):
     labels_fname = folder + '/labels'
     mfc_list_file = open(mfc_list_fname, 'w')
     master_label_file = open(master_label_fname, 'w')
+    master_label_file.write("#!MLF!#\n")
     labels_file = open(labels_fname, 'w')
     for d, ds, fs in os.walk(folder):
         for fname in fs:
