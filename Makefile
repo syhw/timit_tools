@@ -52,6 +52,14 @@ train:
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm4/macros -H $(TMP_TRAIN_FOLDER)/hmm4/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm5 $(TMP_TRAIN_FOLDER)/labels # check these -t parameters TODO
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm5/macros -H $(TMP_TRAIN_FOLDER)/hmm5/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm6 $(TMP_TRAIN_FOLDER)/labels # check these -t parameters TODO
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm6/macros -H $(TMP_TRAIN_FOLDER)/hmm6/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm7 $(TMP_TRAIN_FOLDER)/labels # check these -t parameters TODO
+	@echo "\n>>> re-aligning the training data\n"
+	cp tmp_train/labels tmp_train/dict
+	echo "silence sil" >> tmp_train/dict
+	HVite -l '*' -o SWT -b silence -a -H $(TMP_TRAIN_FOLDER)/hmm7/macros -H $(TMP_TRAIN_FOLDER)/hmm7/hmmdefs -i $(TMP_TRAIN_FOLDER)/aligned.mlf -m -t 250.0 -y lab -S $(TMP_TRAIN_FOLDER)/train.scp $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/labels
+	mkdir $(TMP_TRAIN_FOLDER)/hmm8
+	mkdir $(TMP_TRAIN_FOLDER)/hmm9
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm7/macros -H $(TMP_TRAIN_FOLDER)/hmm7/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm8 $(TMP_TRAIN_FOLDER)/labels # check these -t parameters TODO
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm8/macros -H $(TMP_TRAIN_FOLDER)/hmm8/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm9 $(TMP_TRAIN_FOLDER)/labels # check these -t parameters TODO
 
 
 test:
