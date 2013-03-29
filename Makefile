@@ -47,6 +47,7 @@ train_monophones:
 	@echo "\n>>> tweaking the silence model\n"
 	mkdir $(TMP_TRAIN_FOLDER)/hmm4
 	python create_short_pause_silence_model.py $(TMP_TRAIN_FOLDER)/hmm3/hmmdefs $(TMP_TRAIN_FOLDER)/hmm4/hmmdefs $(TMP_TRAIN_FOLDER)/monophones1
+	#tr "\n" " | " < $(TMP_TRAIN_FOLDER)/monophones1 > $(TMP_TRAIN_FOLDER)/gram
 	cp $(TMP_TRAIN_FOLDER)/hmm3/macros $(TMP_TRAIN_FOLDER)/hmm4/
 	mkdir $(TMP_TRAIN_FOLDER)/hmm5
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm4/macros -H $(TMP_TRAIN_FOLDER)/hmm4/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm5 sil.hed $(TMP_TRAIN_FOLDER)/monophones1
@@ -57,23 +58,31 @@ train_monophones:
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm6/macros -H $(TMP_TRAIN_FOLDER)/hmm6/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm7 $(TMP_TRAIN_FOLDER)/monophones1 # check these -t parameters TODO
 
 realign: train_monophones
+	# TODO check the production of aligned.mlf, and TODO use it for triphones
 	@echo "\n>>> re-aligning the training data\n"
 	cp $(TMP_TRAIN_FOLDER)/monophones1 $(TMP_TRAIN_FOLDER)/dict # because our words are the phones
 	echo "silence sil" >> $(TMP_TRAIN_FOLDER)/dict
 	HVite -l '*' -o SWT -b silence -a -H $(TMP_TRAIN_FOLDER)/hmm7/macros -H $(TMP_TRAIN_FOLDER)/hmm7/hmmdefs -i $(TMP_TRAIN_FOLDER)/aligned.mlf -m -t 250.0 -y lab -S $(TMP_TRAIN_FOLDER)/train.scp $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/monophones1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm8
 	mkdir $(TMP_TRAIN_FOLDER)/hmm9
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm7/macros -H $(TMP_TRAIN_FOLDER)/hmm7/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm8 $(TMP_TRAIN_FOLDER)/monophones1 # check these -t parameters TODO
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm8/macros -H $(TMP_TRAIN_FOLDER)/hmm8/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm9 $(TMP_TRAIN_FOLDER)/monophones1 # check these -t parameters TODO
+	HERest -I $(TMP_TRAIN_FOLDER)/aligned.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm7/macros -H $(TMP_TRAIN_FOLDER)/hmm7/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm8 $(TMP_TRAIN_FOLDER)/monophones1 # check these -t parameters TODO
+	HERest -I $(TMP_TRAIN_FOLDER)/aligned.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -t 250.0 150.0 1000.0 -H $(TMP_TRAIN_FOLDER)/hmm8/macros -H $(TMP_TRAIN_FOLDER)/hmm8/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm9 $(TMP_TRAIN_FOLDER)/monophones1 # check these -t parameters TODO
 
-train_triphones: realign
+train_triphones: train_monophones
+	# TODO use aligned.mlf instead of train.mlf?
 	@echo "\n>>> make triphones from monophones\n"
-	HLEd -n $(TMP_TRAIN_FOLDER)/triphones1 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/aligned.mlf
+	#HLEd -n $(TMP_TRAIN_FOLDER)/triphones1 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/aligned.mlf
+	#mkdir $(TMP_TRAIN_FOLDER)/hmm10
+	#mkdir $(TMP_TRAIN_FOLDER)/hmm11
+	#mkdir $(TMP_TRAIN_FOLDER)/hmm12
+	HLEd -n $(TMP_TRAIN_FOLDER)/triphones1 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/train.mlf
+	mkdir $(TMP_TRAIN_FOLDER)/hmm8
+	mkdir $(TMP_TRAIN_FOLDER)/hmm9
 	mkdir $(TMP_TRAIN_FOLDER)/hmm10
-	mkdir $(TMP_TRAIN_FOLDER)/hmm11
-	mkdir $(TMP_TRAIN_FOLDER)/hmm12
 	maketrihed $(TMP_TRAIN_FOLDER)/monophones1 $(TMP_TRAIN_FOLDER)/triphones1
-	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm9/macros -H $(TMP_TRAIN_FOLDER)/hmm9/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm10 mktri.hed $(TMP_TRAIN_FOLDER)/labels
+	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm7/macros -H $(TMP_TRAIN_FOLDER)/hmm7/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm8 mktri.hed $(TMP_TRAIN_FOLDER)/monophones1
+	HERest -B -I tmp_train/wintri.mlf -t 250.0 150.0 1000.0 -s stats -S tmp_train/train.scp -H tmp_train/hmm8/macros -H tmp_train/hmm8/hmmdefs -M tmp_train/hmm9 tmp_train/triphones1
+	HERest -B -I tmp_train/wintri.mlf -t 250.0 150.0 1000.0 -s stats -S tmp_train/train.scp -H tmp_train/hmm9/macros -H tmp_train/hmm9/hmmdefs -M tmp_train/hmm10 tmp_train/triphones1
 	@echo "\n>>> re-train but with triphones now\n"
 
 test_monophones:
