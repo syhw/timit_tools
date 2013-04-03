@@ -1,5 +1,4 @@
 import os, sys
-from collections import Counter
 
 """
 License: WTFPL http://www.wtfpl.net
@@ -43,8 +42,8 @@ foldings = {'ux': 'uw',
             'q': 'sil'} # <- they removed 'Q' (glottal stop), is it ok to sil?
 
 def process(folder, sentences=False):
-    c_before = Counter()
-    c_after = Counter()
+    c_before = {}
+    c_after = {}
     for d, ds, fs in os.walk(folder):
         for fname in fs:
             if fname[-4:] != '.lab':
@@ -78,8 +77,10 @@ def process(folder, sentences=False):
                 print "this file has more than 2 pauses", fname
             fw.close()
             os.remove(fullname+'~')
-            c_before.update(phones_before)
-            c_after.update(phones_after)
+	    for phn in phones_before:
+		c_before[phn] = c_before.get(phn, 0) + 1
+            for phn in phones_after:
+		c_after[phn] = c_after.get(phn, 0) + 1
             print "dealt with", fullname 
     print "Counts before substitution", c_before
     print "Counts after substitution", c_after
