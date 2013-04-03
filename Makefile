@@ -48,6 +48,9 @@ train_monophones:
 	mkdir $(TMP_TRAIN_FOLDER)/hmm4
 	python create_short_pause_silence_model.py $(TMP_TRAIN_FOLDER)/hmm3/hmmdefs $(TMP_TRAIN_FOLDER)/hmm4/hmmdefs $(TMP_TRAIN_FOLDER)/monophones1
 	#tr "\n" " | " < $(TMP_TRAIN_FOLDER)/monophones1 > $(TMP_TRAIN_FOLDER)/gram
+	#cp $(TMP_TRAIN_FOLDER)/monophones1 $(TMP_TRAIN_FOLDER)/dict # because our words are the phones
+	awk '{if(!$$2) print $$1 " " $$1}' $(TMP_TRAIN_FOLDER)/monophones1 > $(TMP_TRAIN_FOLDER)/dict
+	echo "silence sil" >> $(TMP_TRAIN_FOLDER)/dict
 	cp $(TMP_TRAIN_FOLDER)/hmm3/macros $(TMP_TRAIN_FOLDER)/hmm4/
 	mkdir $(TMP_TRAIN_FOLDER)/hmm5
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm4/macros -H $(TMP_TRAIN_FOLDER)/hmm4/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm5 sil.hed $(TMP_TRAIN_FOLDER)/monophones1
@@ -60,8 +63,6 @@ train_monophones:
 realign: train_monophones
 	# TODO check the production of aligned.mlf, and TODO use it for triphones
 	@echo "\n>>> re-aligning the training data\n"
-	cp $(TMP_TRAIN_FOLDER)/monophones1 $(TMP_TRAIN_FOLDER)/dict # because our words are the phones
-	echo "silence sil" >> $(TMP_TRAIN_FOLDER)/dict
 	HVite -l '*' -o SWT -b silence -a -H $(TMP_TRAIN_FOLDER)/hmm7/macros -H $(TMP_TRAIN_FOLDER)/hmm7/hmmdefs -i $(TMP_TRAIN_FOLDER)/aligned.mlf -m -t 250.0 -y lab -S $(TMP_TRAIN_FOLDER)/train.scp $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/monophones1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm8
 	mkdir $(TMP_TRAIN_FOLDER)/hmm9
@@ -87,7 +88,10 @@ train_triphones: train_monophones
 
 test_monophones:
 	@echo "*** testing the trained model ***"
+	cp wdnet $(TMP_TRAIN_FOLDER)/wd # TODO create the wordnet from the grammar "gram"
 	HVite -H $(TMP_TRAIN_FOLDER)/hmm7/macros -H $(TMP_TRAIN_FOLDER)/hmm7/hmmdefs -S $(dataset_test_folder)/test.scp -l '*' -i $(TMP_TRAIN_FOLDER)/recout.mlf -w $(TMP_TRAIN_FOLDER)/labels -p 0.0 -s 5.0 $(TMP_TRAIN_FOLDER)/dict 
+	#HVite -w tmp_train/wdnet -H tmp_train/hmm4/hmmdefs -i tmp_train/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -T 3 -o ST tmp_train/dict tmp_train/monophones1
+	#HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf tmp_train/monophones1 tmp_train/outtrans.mlf
 
 test:
 	@echo "*** testing the trained model ***"
