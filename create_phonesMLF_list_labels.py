@@ -1,5 +1,4 @@
 import os, sys, shutil
-from collections import Counter
 
 """
 License: WTFPL http://www.wtfpl.net
@@ -19,7 +18,7 @@ corresponds.
 
 def process(folder):
     folder = folder.rstrip('/')
-    c = Counter()
+    c = {}
     mfc_list_fname = folder + '/' + folder.split('/')[-1] + '.scp'
     master_label_fname = folder + '/' + folder.split('/')[-1] + '.mlf'
     labels_fname = folder + '/labels'
@@ -39,7 +38,8 @@ def process(folder):
             for line in open(fullname):
                 master_label_file.write(line)
                 phones.append(line.split()[2])
-            c.update(phones)
+            for tmp_phn in phones:
+                c[tmp_phn] = c.get(tmp_phn, 0) + 1
             master_label_file.write('.\n')
             print "dealt with", fullname 
     mfc_list_file.close()

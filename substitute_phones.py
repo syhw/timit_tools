@@ -1,5 +1,4 @@
 import os, sys
-from collections import Counter
 
 """
 License: WTFPL http://www.wtfpl.net
@@ -44,8 +43,8 @@ foldings = {'ux': 'uw',
 # http://troylee2008.blogspot.fr/2011/05/asr-complete-matlab-script-for-timit.html classifies 'q' as 'pau' (i.e. pause/silence) too
 
 def process(folder, sentences=False):
-    c_before = Counter()
-    c_after = Counter()
+    c_before = {}
+    c_after = {}
     for d, ds, fs in os.walk(folder):
         for fname in fs:
             if fname[-4:] != '.lab':
@@ -79,8 +78,10 @@ def process(folder, sentences=False):
                 print "this file has more than 2 pauses", fname
             fw.close()
             os.remove(fullname+'~')
-            c_before.update(phones_before)
-            c_after.update(phones_after)
+            for tmp_phn in phones_before:
+                c_before[tmp_phn] = c_before.get(tmp_phn, 0) + 1
+            for tmp_phn in phones_after:
+                c_after[tmp_phn] = c_after.get(tmp_phn, 0) + 1
             print "dealt with", fullname 
     print "Counts before substitution", c_before
     print "Counts after substitution", c_after
