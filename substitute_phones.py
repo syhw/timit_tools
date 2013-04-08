@@ -41,6 +41,7 @@ foldings = {'ux': 'uw',
             'ih': 'ix',
             'ah': 'ax',
             'q': 'sil'} # <- they removed 'Q' (glottal stop), is it ok to sil?
+# http://troylee2008.blogspot.fr/2011/05/asr-complete-matlab-script-for-timit.html classifies 'q' as 'pau' (i.e. pause/silence) too
 
 def process(folder, sentences=False):
     c_before = Counter()
