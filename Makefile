@@ -72,8 +72,8 @@ tweak_silence_model: train_monophones_monogauss
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence1 sil.hed $(TMP_TRAIN_FOLDER)/monophones0
 	@echo "\n>>> re-training the HMMs\n"
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence2 $(TMP_TRAIN_FOLDER)/monophones0
-	#HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence3 $(TMP_TRAIN_FOLDER)/monophones0 
-	cp $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/* $(TMP_TRAIN_FOLDER)/hmm_final/
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence3 $(TMP_TRAIN_FOLDER)/monophones0 
+	cp $(TMP_TRAIN_FOLDER)/hmm_mono_silence3/* $(TMP_TRAIN_FOLDER)/hmm_final/
 
 
 train_monophones: tweak_silence_model
@@ -133,9 +133,6 @@ train_triphones: tweak_silence_model
 	# TODO use aligned.mlf instead of train.mlf?
 	@echo "\n>>> make triphones from monophones\n"
 	#HLEd -n $(TMP_TRAIN_FOLDER)/triphones1 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/aligned.mlf
-	#mkdir $(TMP_TRAIN_FOLDER)/hmm11
-	#mkdir $(TMP_TRAIN_FOLDER)/hmm12
-	#mkdir $(TMP_TRAIN_FOLDER)/hmm13
 	HLEd -n $(TMP_TRAIN_FOLDER)/triphones0 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/train.mlf
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_simple0
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_simple1
@@ -148,9 +145,6 @@ train_triphones: tweak_silence_model
 	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple2/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple3 $(TMP_TRAIN_FOLDER)/triphones0 
 	cp $(TMP_TRAIN_FOLDER)/hmm_tri_simple3/* $(TMP_TRAIN_FOLDER)/hmm_final/
 	cp $(TMP_TRAIN_FOLDER)/triphones0 $(TMP_TRAIN_FOLDER)/phones
-	######HVite -H $(TMP_TRAIN_FOLDER)/hmm11/macros -H $(TMP_TRAIN_FOLDER)/hmm11/hmmdefs -S $(dataset_test_folder)/test.scp -l '*' -i $(TMP_TRAIN_FOLDER)/recout.mlf -w $(TMP_TRAIN_FOLDER)/labels -p 0.0 -s 5.0 $(TMP_TRAIN_FOLDER)/dict 
-	#HVite -w tmp_train/wdnet -H tmp_train/hmm4/hmmdefs -i tmp_train/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -T 3 -o ST tmp_train/dict tmp_train/monophones1
-	#HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf tmp_train/monophones1 tmp_train/outtrans.mlf
 
 
 test:
