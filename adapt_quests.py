@@ -1,7 +1,13 @@
 import sys, re
 
-#USAGE:
-#    python adapt_quests.py tmp_train/monophones1 quests_example.hed
+usage = """
+    python adapt_quests.py MONOPHONES_FILE EXISTING_QUESTIONS_FILE PRUNED_QUESTIONS_FILE
+    e.g.
+    python adapt_quests.py tmp_train/monophones0 quests_example.hed tmp_train/quests.hed
+"""
+if len(sys.argv) < 4:
+    print usage
+    sys.exit(-1)
 
 phones_f = open(sys.argv[1])
 phones = []
@@ -10,7 +16,7 @@ for line in phones_f:
 phones_f.close()
 
 questions_f = open(sys.argv[2])
-output_f = open(sys.argv[2].split('.')[0] + '_pruned.hed', 'w')
+output_f = open(sys.argv[3], 'w')
 for line in questions_f:
     tmp = line.rstrip('\n').split('{')
     p_l_s = tmp[1].rstrip('}')

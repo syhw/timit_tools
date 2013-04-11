@@ -129,7 +129,7 @@ realign: tweak_silence_model
 	cp $(TMP_TRAIN_FOLDER)/hmm9/* $(TMP_TRAIN_FOLDER)/hmm_final/
 
 
-train_triphones: tweak_silence_model
+train_untied_triphones: tweak_silence_model
 	# TODO use aligned.mlf instead of train.mlf?
 	@echo "\n>>> make triphones from monophones\n"
 	#HLEd -n $(TMP_TRAIN_FOLDER)/triphones1 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/aligned.mlf
@@ -145,6 +145,28 @@ train_triphones: tweak_silence_model
 	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple2/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple3 $(TMP_TRAIN_FOLDER)/triphones0 
 	cp $(TMP_TRAIN_FOLDER)/hmm_tri_simple3/* $(TMP_TRAIN_FOLDER)/hmm_final/
 	cp $(TMP_TRAIN_FOLDER)/triphones0 $(TMP_TRAIN_FOLDER)/phones
+
+
+train_tied_triphones: train_untied_triphones
+	@echo "\n>>> tying triphones\n"
+	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied0
+	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied1
+	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied2
+	python adapt_quests.py tmp_train/monophones0 quests_example.hed tmp_train/quests.hed
+	# HDMan -n fulllist -l flog dict-tri tmp_train/dict
+	cp fulllist tmp_train/fulllist
+	mkclscript TB 350.0 tmp_train/monophones0 > tmp_train/tb_contexts.hed
+	python create_contexts_tying.py tmp_train/quests.hed tmp_train/tb_contexts.hed tmp_train/tree.hed tmp_train/tri_stats
+	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied0 $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)/triphones0 > $(TMP_TRAIN_FOLDER)/log
+	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied1 $(TMP_TRAIN_FOLDER)/triphones0 
+	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied2 $(TMP_TRAIN_FOLDER)/triphones0 
+	cp $(TMP_TRAIN_FOLDER)/hmm_tri_tied2/* $(TMP_TRAIN_FOLDER)/hmm_final/
+	cp $(TMP_TRAIN_FOLDER)/triphones0 $(TMP_TRAIN_FOLDER)/phones
+
+
+train_triphones: train_tied_triphones
+	@echo "\n>>> estimating the number of mixtures\n"
+	# TODO
 
 
 test:
