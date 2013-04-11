@@ -9,7 +9,7 @@ doc = """
 Usage:
     python create_phonesMLF_and_labels.py [$folder_path]
 
-Will create "${folder}.mlf", "${folder}.scp", "labels" files in $folder_path.
+Will create "${folder}.mlf", "${folder}.scp", "labels" and "dict" files in $folder_path.
 
 If you run it only on the training folder, all the phones that you will
 encounter in the test should be present in training so that the "labels" 
@@ -22,10 +22,10 @@ def process(folder):
     mfc_list_fname = folder + '/' + folder.split('/')[-1] + '.scp'
     master_label_fname = folder + '/' + folder.split('/')[-1] + '.mlf'
     labels_fname = folder + '/labels'
+    dict_fname = folder + '/dict'
     mfc_list_file = open(mfc_list_fname, 'w')
     master_label_file = open(master_label_fname, 'w')
     master_label_file.write("#!MLF!#\n")
-    labels_file = open(labels_fname, 'w')
     for d, ds, fs in os.walk(folder):
         for fname in fs:
             fullname = d.rstrip('/') + '/' + fname
@@ -50,7 +50,11 @@ def process(folder):
     for label in c.iterkeys():
         labels_file.write(label + '\n')
     labels_file.close()
-    print "written labels dict", labels_fname
+    dict_file = open(dict_fname, 'w')
+    for label in sorted(c.keys()):
+        dict_file.write(label + '\n')
+    dict_file.close()
+    print "written labels and dict", labels_fname, dict_fname
     print "phones counts:", c
     print "number of phones:", len(c)
 

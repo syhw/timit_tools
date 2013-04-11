@@ -16,8 +16,8 @@ prepare: wav_config mfcc_and_gammatones.py timit_to_htk_labels.py
 	python timit_to_htk_labels.py $(dataset)/train
 	python timit_to_htk_labels.py $(dataset)/test
 	@echo "\n>>> subtitles phones (61 down to 39)\n"
-	python substitute_phones.py $(dataset)/train
-	python substitute_phones.py $(dataset)/test
+	python substitute_phones.py $(dataset)/train --sentences
+	python substitute_phones.py $(dataset)/test --sentences
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python create_phonesMLF_list_labels.py $(dataset)/train
 	python create_phonesMLF_list_labels.py $(dataset)/test
@@ -172,7 +172,9 @@ train_triphones: train_tied_triphones
 
 test:
 	@echo "*** testing the trained model ***"
-	HBuild tmp_train/phones tmp_train/wdnet
+	#HBuild tmp_train/phones tmp_train/wdnet
+	HLStats -b tmp_train/bigram  -s "<s>" "</s>" tmp_train/phones tmp_train/train.mlf
+	HBuild -m tmp_train/bigram -s "<s>" "</s>" tmp_train/phones tmp_train/wdnet
 	HVite -C config -w tmp_train/wdnet -H tmp_train/hmm_final/hmmdefs -i tmp_train/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST tmp_train/tri-dict tmp_train/phones
 	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf tmp_train/phones tmp_train/outtrans.mlf
 
