@@ -56,7 +56,7 @@ add_short_pauses: train_monophones_monogauss
 	# TODO incomplete
 	python create_short_pause_silence_model.py $(TMP_TRAIN_FOLDER)/hmm3/hmmdefs $(TMP_TRAIN_FOLDER)/hmm4/hmmdefs $(TMP_TRAIN_FOLDER)/monophones1
 	#tr "\n" " | " < $(TMP_TRAIN_FOLDER)/monophones1 > $(TMP_TRAIN_FOLDER)/gram
-	awk '{if(!$$2) print $$1 " " $$1}' $(TMP_TRAIN_FOLDER)/monophones1 > $(TMP_TRAIN_FOLDER)/dict
+	awk '{if(!$$2) print $$1 " " $$1}' $(TMP_TRAIN_FOLDER)/monophones1 | sort > $(TMP_TRAIN_FOLDER)/dict 
 	echo "silence sil" >> $(TMP_TRAIN_FOLDER)/dict # why?
 	
 
@@ -66,7 +66,7 @@ tweak_silence_model: train_monophones_monogauss
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence2
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence3
-	awk '{if(!$$2) print $$1 " " $$1}' $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/dict
+	awk '{if(!$$2) print $$1 " " $$1}' $(TMP_TRAIN_FOLDER)/monophones0 | sort > $(TMP_TRAIN_FOLDER)/dict
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/hmmdefs
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/macros $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/macros
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence1 sil.hed $(TMP_TRAIN_FOLDER)/monophones0
@@ -153,15 +153,16 @@ train_tied_triphones: train_untied_triphones
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied2
 	python adapt_quests.py tmp_train/monophones0 quests_example.hed tmp_train/quests.hed
-	# HDMan -n fulllist -l flog dict-tri tmp_train/dict
+	#HDMan -n fulllist -l flog dict-tri tmp_train/dict
+	HDMan -n fulllist -g global.ded -l flog tmp_train/tri-dict tmp_train/dict
 	cp fulllist tmp_train/fulllist
 	mkclscript TB 350.0 tmp_train/monophones0 > tmp_train/tb_contexts.hed
-	python create_contexts_tying.py tmp_train/quests.hed tmp_train/tb_contexts.hed tmp_train/tree.hed tmp_train/tri_stats
+	python create_contexts_tying.py tmp_train/quests.hed tmp_train/tb_contexts.hed tmp_train/tree.hed tmp_train
 	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied0 $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)/triphones0 > $(TMP_TRAIN_FOLDER)/log
-	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied1 $(TMP_TRAIN_FOLDER)/triphones0 
-	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied2 $(TMP_TRAIN_FOLDER)/triphones0 
+	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied1 $(TMP_TRAIN_FOLDER)/tiedlist
+	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied2 $(TMP_TRAIN_FOLDER)/tiedlist 
 	cp $(TMP_TRAIN_FOLDER)/hmm_tri_tied2/* $(TMP_TRAIN_FOLDER)/hmm_final/
-	cp $(TMP_TRAIN_FOLDER)/triphones0 $(TMP_TRAIN_FOLDER)/phones
+	cp $(TMP_TRAIN_FOLDER)/tiedlist $(TMP_TRAIN_FOLDER)/phones
 
 
 train_triphones: train_tied_triphones
@@ -171,7 +172,7 @@ train_triphones: train_tied_triphones
 
 test:
 	@echo "*** testing the trained model ***"
-	HVite -w tmp_train/wdnet -H tmp_train/hmm_final/hmmdefs -i tmp_train/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST tmp_train/dict tmp_train/phones
+	HVite -C config -w tmp_train/wdnet -H tmp_train/hmm_final/hmmdefs -i tmp_train/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST tmp_train/tri-dict tmp_train/phones
 	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf tmp_train/phones tmp_train/outtrans.mlf
 
 

@@ -1,27 +1,27 @@
 import sys
 
 usage = """
-    python create_contexts_tying.py QUESTIONS_FILE THRESHOLDS_FILE OUTPUT_FILE [STATS_FILE]"
+    python create_contexts_tying.py QUESTIONS_FILE THRESHOLDS_FILE OUTPUT_FILE [FOLDER]"
     e.g.:
-    python create_contexts_tying.py tmp_train/quests_pruned.hed tmp_train/tb_contexts.hed tmp_train/tree.hed tmp_train/tri_stats
+    python create_contexts_tying.py tmp_train/quests_pruned.hed tmp_train/tb_contexts.hed tmp_train/tree.hed tmp_train
     """
 
 if len(sys.argv) < 4:
     print usage
     sys.exit(-1)
 
+folder = '.'
 output = open(sys.argv[3], 'w')
-if len(sys.argv) < 5:
-    output.write("RO 100.0 stats\n")
-else:
-    output.write("RO 100.0 " + sys.argv[4].strip(' ') + '\n')
+if len(sys.argv) > 4:
+    folder = sys.argv[4].strip(' ').strip('/')
+output.write('RO 100.0 "' + folder + '/tri_stats"\n')
 output.write("TR 0\n")
 for line in open(sys.argv[1]):
     output.write(line)
 output.write("TR 2\n")
 for line in open(sys.argv[2]):
     output.write(line)
-output.write('AU "fulllist"\n')
-output.write('CO "tiedlist"\n')
-output.write('ST "trees"\n')
+#output.write('AU "fulllist"\n')
+output.write('CO "' + folder + '/tiedlist"\n')
+output.write('ST "' + folder + 'trees"\n')
 output.close()
