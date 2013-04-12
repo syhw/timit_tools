@@ -35,7 +35,8 @@ train_monophones_monogauss:
 	cp $(dataset_train_folder)/labels $(TMP_TRAIN_FOLDER)/monophones0
 	cp $(dataset_train_folder)/train.mlf $(TMP_TRAIN_FOLDER)/
 	cp $(dataset_train_folder)/train.scp $(TMP_TRAIN_FOLDER)/
-	cp wdnet $(TMP_TRAIN_FOLDER)/
+	python -c "import sys;print '( < ' + ' | '.join([line.strip('\n') for line in sys.stdin]) + ' > )'" < $(TMP_TRAIN_FOLDER)/labels > $(TMP_TRAIN_FOLDER)/gram
+	HParse $(TMP_TRAIN_FOLDER)/gram $(TMP_TRAIN_FOLDER)/wdnet
 	cp proto.hmm $(TMP_TRAIN_FOLDER)/
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple0
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple1
@@ -152,12 +153,12 @@ train_tied_triphones: train_untied_triphones
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied0
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied2
-	python adapt_quests.py tmp_train/monophones0 quests_example.hed tmp_train/quests.hed
-	#HDMan -n fulllist -l flog dict-tri tmp_train/dict
-	HDMan -n fulllist -g global.ded -l flog tmp_train/tri-dict tmp_train/dict
-	cp fulllist tmp_train/fulllist
-	mkclscript TB 350.0 tmp_train/monophones0 > tmp_train/tb_contexts.hed
-	python create_contexts_tying.py tmp_train/quests.hed tmp_train/tb_contexts.hed tmp_train/tree.hed tmp_train
+	python adapt_quests.py $(TMP_TRAIN_FOLDER)/monophones0 quests_example.hed $(TMP_TRAIN_FOLDER)/quests.hed
+	#HDMan -n fulllist -l flog dict-tri $(TMP_TRAIN_FOLDER)/dict
+	HDMan -n fulllist -g global.ded -l flog $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/dict
+	cp fulllist $(TMP_TRAIN_FOLDER)/fulllist
+	mkclscript TB 350.0 $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/tb_contexts.hed
+	python create_contexts_tying.py $(TMP_TRAIN_FOLDER)/quests.hed $(TMP_TRAIN_FOLDER)/tb_contexts.hed $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)
 	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied0 $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)/triphones0 > $(TMP_TRAIN_FOLDER)/log
 	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied1 $(TMP_TRAIN_FOLDER)/tiedlist
 	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied2 $(TMP_TRAIN_FOLDER)/tiedlist 
@@ -172,11 +173,12 @@ train_triphones: train_tied_triphones
 
 test:
 	@echo "*** testing the trained model ***"
-	#HBuild tmp_train/phones tmp_train/wdnet
-	HLStats -b tmp_train/bigram  -s "<s>" "</s>" tmp_train/phones tmp_train/train.mlf
-	HBuild -m tmp_train/bigram -s "<s>" "</s>" tmp_train/phones tmp_train/wdnet
-	HVite -C config -w tmp_train/wdnet -H tmp_train/hmm_final/hmmdefs -i tmp_train/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST tmp_train/tri-dict tmp_train/phones
-	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf tmp_train/phones tmp_train/outtrans.mlf
+	##HBuild $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/wdnet
+	#HLStats -b $(TMP_TRAIN_FOLDER)/bigram  -s "<s>" "</s>" $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/train.mlf
+	#HBuild -m $(TMP_TRAIN_FOLDER)/bigram -s "<s>" "</s>" $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/wdnet
+	#HVite -C config -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/phones
+	HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/phones
+	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
 clean:
