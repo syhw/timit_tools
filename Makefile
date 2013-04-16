@@ -155,8 +155,7 @@ train_tied_triphones: train_untied_triphones
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied2
 	python adapt_quests.py $(TMP_TRAIN_FOLDER)/monophones0 quests_example.hed $(TMP_TRAIN_FOLDER)/quests.hed
 	#HDMan -n fulllist -l flog dict-tri $(TMP_TRAIN_FOLDER)/dict
-	HDMan -n fulllist -g global.ded -l flog $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/dict
-	cp fulllist $(TMP_TRAIN_FOLDER)/fulllist
+	HDMan -n $(TMP_TRAIN_FOLDER)/fulllist -g global.ded -l flog $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/dict
 	mkclscript TB 350.0 $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/tb_contexts.hed
 	python create_contexts_tying.py $(TMP_TRAIN_FOLDER)/quests.hed $(TMP_TRAIN_FOLDER)/tb_contexts.hed $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)
 	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied0 $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)/triphones0 > $(TMP_TRAIN_FOLDER)/log
