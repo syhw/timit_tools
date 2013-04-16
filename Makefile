@@ -170,6 +170,12 @@ train_triphones: train_tied_triphones
 	# TODO
 
 
+test_mono:
+	@echo "*** testing the monophone trained model ***"
+	HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
+
+
 test:
 	@echo "*** testing the trained model ***"
 	##HBuild $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/wdnet
