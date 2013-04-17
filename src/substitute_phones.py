@@ -12,7 +12,7 @@ Usage:
 Substitutes phones found in .lab files (in-place) by using the foldings dict.
 
 The optional --sentences argument will replace starting and ending pauses 
-respectively by <s> and </s>.
+respectively by !ENTER and !EXIT. 
 """
 
 foldings = {'ux': 'uw', 
@@ -61,11 +61,11 @@ def process(folder, sentences=False):
                 tmpline = line
                 if sentences:
                     if not saw_pause:
-                        tmpline = tmpline.replace('h#', '<s>')
-                        tmpline = tmpline.replace('sil', '<s>')
+                        tmpline = tmpline.replace('h#', '!ENTER')
+                        tmpline = tmpline.replace('sil', '!ENTER')
                     else:
-                        tmpline = tmpline.replace('h#', '</s>')
-                        tmpline = tmpline.replace('sil', '</s>')
+                        tmpline = tmpline.replace('h#', '!EXIT')
+                        tmpline = tmpline.replace('sil', '!EXIT')
                 tmpline = tmpline.replace('-', '')
                 tmp = tmpline.split()
                 for k, v in foldings.iteritems():

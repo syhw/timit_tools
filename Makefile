@@ -35,16 +35,16 @@ train_monophones_monogauss:
 	cp $(dataset_train_folder)/labels $(TMP_TRAIN_FOLDER)/monophones0
 	cp $(dataset_train_folder)/train.mlf $(TMP_TRAIN_FOLDER)/
 	cp $(dataset_train_folder)/train.scp $(TMP_TRAIN_FOLDER)/
-	#python -c "import sys;print '( < ' + ' | '.join([line.strip('\n') for line in sys.stdin]) + ' > )'" < $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/gram
-	#HParse $(TMP_TRAIN_FOLDER)/gram $(TMP_TRAIN_FOLDER)/wdnet
-	HBuild $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnet
+	python -c "import sys;print '( < ' + ' | '.join([line.strip('\n') for line in sys.stdin]) + ' > )'" < $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/gram
+	HParse $(TMP_TRAIN_FOLDER)/gram $(TMP_TRAIN_FOLDER)/wdnet
+	#HBuild $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnet
 	cp proto.hmm $(TMP_TRAIN_FOLDER)/
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple0
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple2
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple3
 	# -A -D -T 1 
-	HCompV -f 0.001 -m -S $(TMP_TRAIN_FOLDER)/train.scp -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple0 $(TMP_TRAIN_FOLDER)/proto.hmm
+	HCompV -f 0.0001 -m -S $(TMP_TRAIN_FOLDER)/train.scp -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple0 $(TMP_TRAIN_FOLDER)/proto.hmm
 	python src/create_hmmdefs_from_proto.py $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/proto $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/ $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/vFloors
 	@echo "\n>>> training the HMMs (3 times)\n"
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple1 $(TMP_TRAIN_FOLDER)/monophones0 
@@ -171,6 +171,11 @@ train_tied_triphones: train_untied_triphones
 train_triphones: train_tied_triphones
 	@echo "\n>>> estimating the number of mixtures\n"
 	# TODO
+	
+
+bigram_LM:
+	@echo "*** Estimating a bigram language model (only with !ENTER & !EXIT) ***"
+	HLStats -b $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/dictionary $(TMP_TRAIN_FOLDER)/train.mlf
 
 
 test_monophones:
@@ -179,14 +184,21 @@ test_monophones:
 	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
-test:
-	@echo "*** testing the trained model ***"
+test_triphones:
+	@echo "*** testing the triphone trained model ***"
 	##HBuild $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/wdnet
 	#HLStats -b $(TMP_TRAIN_FOLDER)/bigram  -s "<s>" "</s>" $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/train.mlf
 	#HBuild -m $(TMP_TRAIN_FOLDER)/bigram -s "<s>" "</s>" $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/wdnet
 	#HVite -C config -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/phones
 	HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/phones
 	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
+
+
+align:
+	@echo "*** aligning the content of input_scp in output_mlf ***"
+	@echo ">>> you need to have trained a (monophone) model with sentences start & end."
+	@echo "/!\ Currently on monophones /!\" # TODO not only monophones
+	HVite -l '*' -a -m -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -S $(input_scp) -w $(TMP_TRAIN_FOLDER)/wdnet $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones # -f if you want the full states alignment
 
 
 clean:
