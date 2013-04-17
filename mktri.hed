@@ -10,6 +10,7 @@ TI T_ay {(*-ay+*,ay+*,*-ay).transP}
 TI T_ax {(*-ax+*,ax+*,*-ax).transP}
 TI T_ng {(*-ng+*,ng+*,*-ng).transP}
 TI T_er {(*-er+*,er+*,*-er).transP}
+TI T_z {(*-z+*,z+*,*-z).transP}
 TI T_t {(*-t+*,t+*,*-t).transP}
 TI T_iy {(*-iy+*,iy+*,*-iy).transP}
 TI T_th {(*-th+*,th+*,*-th).transP}
@@ -31,10 +32,11 @@ TI T_n {(*-n+*,n+*,*-n).transP}
 TI T_p {(*-p+*,p+*,*-p).transP}
 TI T_s {(*-s+*,s+*,*-s).transP}
 TI T_r {(*-r+*,r+*,*-r).transP}
+TI T_!EXIT {(*-!EXIT+*,!EXIT+*,*-!EXIT).transP}
 TI T_uh {(*-uh+*,uh+*,*-uh).transP}
 TI T_w {(*-w+*,w+*,*-w).transP}
 TI T_v {(*-v+*,v+*,*-v).transP}
 TI T_y {(*-y+*,y+*,*-y).transP}
 TI T_ae {(*-ae+*,ae+*,*-ae).transP}
-TI T_z {(*-z+*,z+*,*-z).transP}
+TI T_!ENTER {(*-!ENTER+*,!ENTER+*,*-!ENTER).transP}
 TI T_uw {(*-uw+*,uw+*,*-uw).transP}

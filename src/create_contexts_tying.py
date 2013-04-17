@@ -21,7 +21,8 @@ for line in open(sys.argv[1]):
 output.write("TR 2\n")
 for line in open(sys.argv[2]):
     output.write(line)
-output.write('AU "' + folder + '/fulllist"\n')
+#output.write('AU "' + folder + '/fulllist"\n') # we expect to already have 
+# the full list of triphones in our training set
 output.write('CO "' + folder + '/tiedlist"\n')
 output.write('ST "' + folder + '/trees"\n')
 output.close()

@@ -31,7 +31,7 @@ train_monophones_monogauss:
 	@echo "*** training the HMMs with HTK ***"
 	@echo "using folder $(dataset_train_folder)"
 	@echo "\n>>> preparing the HMMs\n"
-	mkdir $(TMP_TRAIN_FOLDER)
+	mkdir -p $(TMP_TRAIN_FOLDER)
 	cp $(dataset_train_folder)/labels $(TMP_TRAIN_FOLDER)/monophones0
 	cp $(dataset_train_folder)/train.mlf $(TMP_TRAIN_FOLDER)/
 	cp $(dataset_train_folder)/train.scp $(TMP_TRAIN_FOLDER)/
@@ -39,10 +39,11 @@ train_monophones_monogauss:
 	HParse $(TMP_TRAIN_FOLDER)/gram $(TMP_TRAIN_FOLDER)/wdnet
 	#HBuild $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnet
 	cp proto.hmm $(TMP_TRAIN_FOLDER)/
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple0
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple1
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple2
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple3
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_simple0
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_simple1
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_simple2
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_simple3
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_final
 	# -A -D -T 1 
 	HCompV -f 0.0001 -m -S $(TMP_TRAIN_FOLDER)/train.scp -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple0 $(TMP_TRAIN_FOLDER)/proto.hmm
 	python src/create_hmmdefs_from_proto.py $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/proto $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/ $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/vFloors
@@ -50,7 +51,7 @@ train_monophones_monogauss:
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple1 $(TMP_TRAIN_FOLDER)/monophones0 
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple2 $(TMP_TRAIN_FOLDER)/monophones0 
 	HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple3 $(TMP_TRAIN_FOLDER)/monophones0 
-	cp -r $(TMP_TRAIN_FOLDER)/hmm_mono_simple3 $(TMP_TRAIN_FOLDER)/hmm_final
+	cp $(TMP_TRAIN_FOLDER)/hmm_mono_simple3/* $(TMP_TRAIN_FOLDER)/hmm_final/
 	cp $(dataset_train_folder)/dict $(TMP_TRAIN_FOLDER)/dict
 	cp $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/phones
 
@@ -65,10 +66,10 @@ add_short_pauses: train_monophones_monogauss
 
 tweak_silence_model: train_monophones_monogauss
 	@echo "\n>>> tweaking the silence model\n"
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence0
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence1
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence2
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence3
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_silence0
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_silence1
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_silence2
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_silence3
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/hmmdefs
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/macros $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/macros
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence1 sil.hed $(TMP_TRAIN_FOLDER)/monophones0
@@ -80,10 +81,10 @@ tweak_silence_model: train_monophones_monogauss
 
 train_monophones: tweak_silence_model
 	@echo "\n>>> estimating the number of mixtures\n"
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_mix0 # we will loop on these folders as we split
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_mix1
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_mix2
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_mix3
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_mix0 # we will loop on these folders as we split
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_mix1
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_mix2
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_mix3
 	#HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix0 $(TMP_TRAIN_FOLDER)/monophones0 
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/macros $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs
@@ -126,8 +127,8 @@ realign: tweak_silence_model
 	# TODO check the production of aligned.mlf, and TODO use it for triphones
 	@echo "\n>>> re-aligning the training data\n"
 	HVite -l '*' -o SWT -b sil -a -H $(TMP_TRAIN_FOLDER)/hmm8/macros -H $(TMP_TRAIN_FOLDER)/hmm8/hmmdefs -i $(TMP_TRAIN_FOLDER)/aligned.mlf -m -t 250.0 -y lab -S $(TMP_TRAIN_FOLDER)/train.scp $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/monophones0
-	mkdir $(TMP_TRAIN_FOLDER)/hmm9
-	mkdir $(TMP_TRAIN_FOLDER)/hmm10
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm9
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm10
 	HERest -I $(TMP_TRAIN_FOLDER)/aligned.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm8/macros -H $(TMP_TRAIN_FOLDER)/hmm8/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm9 $(TMP_TRAIN_FOLDER)/monophones0 
 	HERest -I $(TMP_TRAIN_FOLDER)/aligned.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm9/macros -H $(TMP_TRAIN_FOLDER)/hmm9/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm10 $(TMP_TRAIN_FOLDER)/monophones0 
 	cp $(TMP_TRAIN_FOLDER)/hmm9/* $(TMP_TRAIN_FOLDER)/hmm_final/
@@ -138,10 +139,10 @@ train_untied_triphones: tweak_silence_model
 	@echo "\n>>> make triphones from monophones\n"
 	#HLEd -n $(TMP_TRAIN_FOLDER)/triphones1 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/aligned.mlf
 	HLEd -n $(TMP_TRAIN_FOLDER)/triphones0 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/train.mlf
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_simple0
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_simple1
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_simple2
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_simple3
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_simple0
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_simple1
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_simple2
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_simple3
 	maketrihed $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/triphones0
 	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple0 mktri.hed $(TMP_TRAIN_FOLDER)/monophones0
 	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple1 $(TMP_TRAIN_FOLDER)/triphones0 
@@ -153,12 +154,11 @@ train_untied_triphones: tweak_silence_model
 
 train_tied_triphones: train_untied_triphones
 	@echo "\n>>> tying triphones\n"
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied0
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied1
-	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied2
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_tied0
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_tied1
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_tied2
 	python src/adapt_quests.py $(TMP_TRAIN_FOLDER)/monophones0 quests_example.hed $(TMP_TRAIN_FOLDER)/quests.hed
-	#HDMan -n fulllist -l flog dict-tri $(TMP_TRAIN_FOLDER)/dict
-	HDMan -n $(TMP_TRAIN_FOLDER)/fulllist -g global.ded -l flog $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/dict
+	#HDMan -n $(TMP_TRAIN_FOLDER)/fulllist -g global.ded -l flog $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/dict # this is to generate the full list of phones but we consider that we saw all triphones in the training (anyway there are the monophones)
 	mkclscript TB 350.0 $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/tb_contexts.hed
 	python src/create_contexts_tying.py $(TMP_TRAIN_FOLDER)/quests.hed $(TMP_TRAIN_FOLDER)/tb_contexts.hed $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)
 	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied0 $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)/triphones0 > $(TMP_TRAIN_FOLDER)/log
@@ -175,7 +175,7 @@ train_triphones: train_tied_triphones
 
 bigram_LM:
 	@echo "*** Estimating a bigram language model (only with !ENTER & !EXIT) ***"
-	HLStats -b $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/dictionary $(TMP_TRAIN_FOLDER)/train.mlf
+	HLStats -b $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/train.mlf
 
 
 test_monophones:
