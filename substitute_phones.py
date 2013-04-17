@@ -62,8 +62,10 @@ def process(folder, sentences=False):
                 if sentences:
                     if not saw_pause:
                         tmpline = tmpline.replace('h#', '<s>')
+                        tmpline = tmpline.replace('sil', '<s>')
                     else:
                         tmpline = tmpline.replace('h#', '</s>')
+                        tmpline = tmpline.replace('sil', '</s>')
                 tmpline = tmpline.replace('-', '')
                 tmp = tmpline.split()
                 for k, v in foldings.iteritems():
@@ -72,7 +74,7 @@ def process(folder, sentences=False):
                         tmpline = ' '.join(tmp) + '\n'
                 fw.write(tmpline)
                 phones_after.append(tmpline.split()[2])
-                if 'h#' in line:
+                if 'h#' in line or 'sil' in line:
                     saw_pause += 1
             if saw_pause > 2:
                 print "this file has more than 2 pauses", fname

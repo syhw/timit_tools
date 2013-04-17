@@ -35,8 +35,9 @@ train_monophones_monogauss:
 	cp $(dataset_train_folder)/labels $(TMP_TRAIN_FOLDER)/monophones0
 	cp $(dataset_train_folder)/train.mlf $(TMP_TRAIN_FOLDER)/
 	cp $(dataset_train_folder)/train.scp $(TMP_TRAIN_FOLDER)/
-	python -c "import sys;print '( < ' + ' | '.join([line.strip('\n') for line in sys.stdin]) + ' > )'" < $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/gram
-	HParse $(TMP_TRAIN_FOLDER)/gram $(TMP_TRAIN_FOLDER)/wdnet
+	#python -c "import sys;print '( < ' + ' | '.join([line.strip('\n') for line in sys.stdin]) + ' > )'" < $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/gram
+	#HParse $(TMP_TRAIN_FOLDER)/gram $(TMP_TRAIN_FOLDER)/wdnet
+	HBuild $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnet
 	cp proto.hmm $(TMP_TRAIN_FOLDER)/
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple0
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple1
@@ -48,7 +49,7 @@ train_monophones_monogauss:
 	@echo "\n>>> training the HMMs (3 times)\n"
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple1 $(TMP_TRAIN_FOLDER)/monophones0 
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple2 $(TMP_TRAIN_FOLDER)/monophones0 
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple3 $(TMP_TRAIN_FOLDER)/monophones0 
+	HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple3 $(TMP_TRAIN_FOLDER)/monophones0 
 	cp -r $(TMP_TRAIN_FOLDER)/hmm_mono_simple3 $(TMP_TRAIN_FOLDER)/hmm_final
 	cp $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/phones
 
@@ -73,7 +74,7 @@ tweak_silence_model: train_monophones_monogauss
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence1 sil.hed $(TMP_TRAIN_FOLDER)/monophones0
 	@echo "\n>>> re-training the HMMs\n"
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence2 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence3 $(TMP_TRAIN_FOLDER)/monophones0 
+	HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence3 $(TMP_TRAIN_FOLDER)/monophones0 
 	cp $(TMP_TRAIN_FOLDER)/hmm_mono_silence3/* $(TMP_TRAIN_FOLDER)/hmm_final/
 
 
@@ -83,7 +84,9 @@ train_monophones: tweak_silence_model
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_mix1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_mix2
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_mix3
-	HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix0 $(TMP_TRAIN_FOLDER)/monophones0 
+	#HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix0 $(TMP_TRAIN_FOLDER)/monophones0 
+	cp $(TMP_TRAIN_FOLDER)/hmm_final/macros $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros
+	cp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs
 	python create_mixtures_from_stats.py $(TMP_TRAIN_FOLDER)/stats
 	@echo "\n--- mixtures of 2 components ---"
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU2.hed $(TMP_TRAIN_FOLDER)/monophones0
