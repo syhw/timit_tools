@@ -7,20 +7,20 @@ help:
 	@echo "make test dataset_test_folder=~/postdoc/datasets/TIMIT/test"
 
 
-prepare: wav_config mfcc_and_gammatones.py timit_to_htk_labels.py
+prepare: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo "*** preparing the dataset for phones recognition ***"
 	@echo "\n>>> produce MFCC from WAV files\n"
-	python mfcc_and_gammatones.py --htk-mfcc $(dataset)/train
-	python mfcc_and_gammatones.py --htk-mfcc $(dataset)/test
+	python src/mfcc_and_gammatones.py --htk-mfcc $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc $(dataset)/test
 	@echo "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
-	python timit_to_htk_labels.py $(dataset)/train
-	python timit_to_htk_labels.py $(dataset)/test
+	python src/timit_to_htk_labels.py $(dataset)/train
+	python src/timit_to_htk_labels.py $(dataset)/test
 	@echo "\n>>> subtitles phones (61 down to 39)\n"
-	python substitute_phones.py $(dataset)/train --sentences
-	python substitute_phones.py $(dataset)/test --sentences
+	python src/substitute_phones.py $(dataset)/train --sentences
+	python src/substitute_phones.py $(dataset)/test --sentences
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
-	python create_phonesMLF_list_labels.py $(dataset)/train
-	python create_phonesMLF_list_labels.py $(dataset)/test
+	python src/create_phonesMLF_list_labels.py $(dataset)/train
+	python src/create_phonesMLF_list_labels.py $(dataset)/test
 
 
 train: train_monophones
@@ -45,18 +45,19 @@ train_monophones_monogauss:
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_simple3
 	# -A -D -T 1 
 	HCompV -f 0.001 -m -S $(TMP_TRAIN_FOLDER)/train.scp -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple0 $(TMP_TRAIN_FOLDER)/proto.hmm
-	python create_hmmdefs_from_proto.py $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/proto $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/ $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/vFloors
+	python src/create_hmmdefs_from_proto.py $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/proto $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/ $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/vFloors
 	@echo "\n>>> training the HMMs (3 times)\n"
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple1 $(TMP_TRAIN_FOLDER)/monophones0 
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple2 $(TMP_TRAIN_FOLDER)/monophones0 
 	HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_simple2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_simple3 $(TMP_TRAIN_FOLDER)/monophones0 
 	cp -r $(TMP_TRAIN_FOLDER)/hmm_mono_simple3 $(TMP_TRAIN_FOLDER)/hmm_final
+	cp $(dataset_train_folder)/dict $(TMP_TRAIN_FOLDER)/dict
 	cp $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/phones
 
 
 add_short_pauses: train_monophones_monogauss
 	# TODO incomplete
-	python create_short_pause_silence_model.py $(TMP_TRAIN_FOLDER)/hmm3/hmmdefs $(TMP_TRAIN_FOLDER)/hmm4/hmmdefs $(TMP_TRAIN_FOLDER)/monophones1
+	python src/create_short_pause_silence_model.py $(TMP_TRAIN_FOLDER)/hmm3/hmmdefs $(TMP_TRAIN_FOLDER)/hmm4/hmmdefs $(TMP_TRAIN_FOLDER)/monophones1
 	#tr "\n" " | " < $(TMP_TRAIN_FOLDER)/monophones1 > $(TMP_TRAIN_FOLDER)/gram
 	awk '{if(!$$2) print $$1 " " $$1}' $(TMP_TRAIN_FOLDER)/monophones1 | sort > $(TMP_TRAIN_FOLDER)/dict # TODO replace sort by a script because GNU sort sucks
 	echo "silence sil" >> $(TMP_TRAIN_FOLDER)/dict # why?
@@ -68,7 +69,6 @@ tweak_silence_model: train_monophones_monogauss
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence2
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_mono_silence3
-	awk '{if(!$$2) print $$1 " " $$1}' $(TMP_TRAIN_FOLDER)/monophones0 | sort > $(TMP_TRAIN_FOLDER)/dict # TODO replace sort by a script because GNU sort sucks
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/hmmdefs
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/macros $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/macros
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence1 sil.hed $(TMP_TRAIN_FOLDER)/monophones0
@@ -87,7 +87,7 @@ train_monophones: tweak_silence_model
 	#HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix0 $(TMP_TRAIN_FOLDER)/monophones0 
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/macros $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros
 	cp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs
-	python create_mixtures_from_stats.py $(TMP_TRAIN_FOLDER)/stats
+	python src/create_mixtures_from_stats.py $(TMP_TRAIN_FOLDER)/stats
 	@echo "\n--- mixtures of 2 components ---"
 	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU2.hed $(TMP_TRAIN_FOLDER)/monophones0
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix1 $(TMP_TRAIN_FOLDER)/monophones0
@@ -156,11 +156,11 @@ train_tied_triphones: train_untied_triphones
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied0
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied1
 	mkdir $(TMP_TRAIN_FOLDER)/hmm_tri_tied2
-	python adapt_quests.py $(TMP_TRAIN_FOLDER)/monophones0 quests_example.hed $(TMP_TRAIN_FOLDER)/quests.hed
+	python src/adapt_quests.py $(TMP_TRAIN_FOLDER)/monophones0 quests_example.hed $(TMP_TRAIN_FOLDER)/quests.hed
 	#HDMan -n fulllist -l flog dict-tri $(TMP_TRAIN_FOLDER)/dict
 	HDMan -n $(TMP_TRAIN_FOLDER)/fulllist -g global.ded -l flog $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/dict
 	mkclscript TB 350.0 $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/tb_contexts.hed
-	python create_contexts_tying.py $(TMP_TRAIN_FOLDER)/quests.hed $(TMP_TRAIN_FOLDER)/tb_contexts.hed $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)
+	python src/create_contexts_tying.py $(TMP_TRAIN_FOLDER)/quests.hed $(TMP_TRAIN_FOLDER)/tb_contexts.hed $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)
 	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied0 $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)/triphones0 > $(TMP_TRAIN_FOLDER)/log
 	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied1 $(TMP_TRAIN_FOLDER)/tiedlist
 	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied2 $(TMP_TRAIN_FOLDER)/tiedlist 
@@ -173,7 +173,7 @@ train_triphones: train_tied_triphones
 	# TODO
 
 
-test_mono:
+test_monophones:
 	@echo "*** testing the monophone trained model ***"
 	HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
 	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf

@@ -52,7 +52,7 @@ def process(folder):
     labels_file.close()
     dict_file = open(dict_fname, 'w')
     for label in sorted(c.keys()):
-        dict_file.write(label + '\n')
+        dict_file.write(label + ' ' + label + '\n')
     dict_file.close()
     print "written labels and dict", labels_fname, dict_fname
     print "phones counts:", c
