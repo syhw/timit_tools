@@ -11,7 +11,7 @@ with open(sys.argv[1]) as f:
             continue
         (id_phn, phn, nb), nb_frames = line.split()[:3], line.split()[3:]
         nb_frames_min = min(map(float, nb_frames))
-        nb_mixtures = int(nb_frames_min / 100) 
+        nb_mixtures = max(1, int(nb_frames_min / 100))
         # at least 100 frames per mixture comp.
         phn = phn.strip('"')
         max_mix[phn] = nb_mixtures

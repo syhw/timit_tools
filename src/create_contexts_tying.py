@@ -14,7 +14,7 @@ folder = '.'
 output = open(sys.argv[3], 'w')
 if len(sys.argv) > 4:
     folder = sys.argv[4].strip(' ').strip('/')
-output.write('RO 100.0 "' + folder + '/tri_stats"\n')
+output.write('RO 100.0 "' + folder + '/stats"\n')
 output.write("TR 0\n")
 for line in open(sys.argv[1]):
     output.write(line)

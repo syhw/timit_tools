@@ -64,7 +64,7 @@ add_short_pauses: train_monophones_monogauss
 	echo "silence sil" >> $(TMP_TRAIN_FOLDER)/dict # why?
 	
 
-tweak_silence_model: train_monophones_monogauss
+tweak_silence_model: train_monophones_monogauss 
 	@echo "\n>>> tweaking the silence model\n"
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_silence0
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_silence1
@@ -76,51 +76,54 @@ tweak_silence_model: train_monophones_monogauss
 	@echo "\n>>> re-training the HMMs\n"
 	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence2 $(TMP_TRAIN_FOLDER)/monophones0
 	HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_silence2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_silence3 $(TMP_TRAIN_FOLDER)/monophones0 
+	cp $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/phones
 	cp $(TMP_TRAIN_FOLDER)/hmm_mono_silence3/* $(TMP_TRAIN_FOLDER)/hmm_final/
 
 
-train_monophones: tweak_silence_model
+train_mixtures:
 	@echo "\n>>> estimating the number of mixtures\n"
-	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_mix0 # we will loop on these folders as we split
-	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_mix1
-	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_mix2
-	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_mix3
-	#HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix0 $(TMP_TRAIN_FOLDER)/monophones0 
-	cp $(TMP_TRAIN_FOLDER)/hmm_final/macros $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros
-	cp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mix0 # we will loop on these folders as we split
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mix1
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mix2
+	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mix3
+	#HERest -s $(TMP_TRAIN_FOLDER)/stats -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix0 $(TMP_TRAIN_FOLDER)/phones 
+	cp $(TMP_TRAIN_FOLDER)/hmm_final/macros $(TMP_TRAIN_FOLDER)/hmm_mix0/macros
+	cp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs
 	python src/create_mixtures_from_stats.py $(TMP_TRAIN_FOLDER)/stats
 	@echo "\n--- mixtures of 2 components ---"
-	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU2.hed $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix1 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix2 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix3 $(TMP_TRAIN_FOLDER)/monophones0
-	cp $(TMP_TRAIN_FOLDER)/hmm_mono_mix3/* $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/
+	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU2.hed $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix1 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix2 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix3 $(TMP_TRAIN_FOLDER)/phones
+	cp $(TMP_TRAIN_FOLDER)/hmm_mix3/* $(TMP_TRAIN_FOLDER)/hmm_mix0/
 	@echo "\n--- mixtures of 3 components ---"
-	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU3.hed $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix1 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix2 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix3 $(TMP_TRAIN_FOLDER)/monophones0
-	cp $(TMP_TRAIN_FOLDER)/hmm_mono_mix3/* $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/
+	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU3.hed $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix1 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix2 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix3 $(TMP_TRAIN_FOLDER)/phones
+	cp $(TMP_TRAIN_FOLDER)/hmm_mix3/* $(TMP_TRAIN_FOLDER)/hmm_mix0/
 	@echo "\n--- mixtures of 5 components ---"
-	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU5.hed $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix1 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix2 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix3 $(TMP_TRAIN_FOLDER)/monophones0
-	cp $(TMP_TRAIN_FOLDER)/hmm_mono_mix3/* $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/
+	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU5.hed $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix1 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix2 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix3 $(TMP_TRAIN_FOLDER)/phones
+	cp $(TMP_TRAIN_FOLDER)/hmm_mix3/* $(TMP_TRAIN_FOLDER)/hmm_mix0/
 	@echo "\n--- mixtures of 9 components ---"
-	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU9.hed $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix1 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix2 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix3 $(TMP_TRAIN_FOLDER)/monophones0
-	cp $(TMP_TRAIN_FOLDER)/hmm_mono_mix3/* $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/
+	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU9.hed $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix1 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix2 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix3 $(TMP_TRAIN_FOLDER)/phones
+	cp $(TMP_TRAIN_FOLDER)/hmm_mix3/* $(TMP_TRAIN_FOLDER)/hmm_mix0/
 	@echo "\n--- mixtures of 17 components ---"
-	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU17.hed $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix1 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix2 $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mono_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mono_mix3 $(TMP_TRAIN_FOLDER)/monophones0
-	cp $(TMP_TRAIN_FOLDER)/hmm_mono_mix3/* $(TMP_TRAIN_FOLDER)/hmm_final/
-	cp $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/phones
+	HHEd -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs $(TMP_TRAIN_FOLDER)/TRMU17.hed $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix0/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix1 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix1/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix2 $(TMP_TRAIN_FOLDER)/phones
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_mix2/macros -H $(TMP_TRAIN_FOLDER)/hmm_mix2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_mix3 $(TMP_TRAIN_FOLDER)/phones
+	cp $(TMP_TRAIN_FOLDER)/hmm_mix3/* $(TMP_TRAIN_FOLDER)/hmm_final/
 
+
+train_monophones: train_monophones_monogauss tweak_silence_model train_mixtures
+	@echo "\n>>> full training of monophones\n"
 
 
 realign: tweak_silence_model
@@ -139,15 +142,17 @@ train_untied_triphones: tweak_silence_model
 	@echo "\n>>> make triphones from monophones\n"
 	#HLEd -n $(TMP_TRAIN_FOLDER)/triphones1 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/aligned.mlf
 	HLEd -n $(TMP_TRAIN_FOLDER)/triphones0 -l '*' -i $(TMP_TRAIN_FOLDER)/wintri.mlf mktri.led $(TMP_TRAIN_FOLDER)/train.mlf
+	cp $(TMP_TRAIN_FOLDER)/train.mlf $(TMP_TRAIN_FOLDER)/mono_train.mlf
+	cp $(TMP_TRAIN_FOLDER)/wintri.mlf $(TMP_TRAIN_FOLDER)/train.mlf
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_simple0
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_simple1
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_simple2
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_tri_simple3
 	maketrihed $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/triphones0
 	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple0 mktri.hed $(TMP_TRAIN_FOLDER)/monophones0
-	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple1 $(TMP_TRAIN_FOLDER)/triphones0 
-	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple2 $(TMP_TRAIN_FOLDER)/triphones0 
-	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple2/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple3 $(TMP_TRAIN_FOLDER)/triphones0 
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -s $(TMP_TRAIN_FOLDER)/stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple1 $(TMP_TRAIN_FOLDER)/triphones0 
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -s $(TMP_TRAIN_FOLDER)/stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple2 $(TMP_TRAIN_FOLDER)/triphones0 
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -s $(TMP_TRAIN_FOLDER)/stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple2/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_simple2/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_simple3 $(TMP_TRAIN_FOLDER)/triphones0 
 	cp $(TMP_TRAIN_FOLDER)/hmm_tri_simple3/* $(TMP_TRAIN_FOLDER)/hmm_final/
 	cp $(TMP_TRAIN_FOLDER)/triphones0 $(TMP_TRAIN_FOLDER)/phones
 
@@ -162,15 +167,14 @@ train_tied_triphones: train_untied_triphones
 	mkclscript TB 350.0 $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/tb_contexts.hed
 	python src/create_contexts_tying.py $(TMP_TRAIN_FOLDER)/quests.hed $(TMP_TRAIN_FOLDER)/tb_contexts.hed $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)
 	HHEd -B -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied0 $(TMP_TRAIN_FOLDER)/tree.hed $(TMP_TRAIN_FOLDER)/triphones0 > $(TMP_TRAIN_FOLDER)/log
-	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied1 $(TMP_TRAIN_FOLDER)/tiedlist
-	HERest -I $(TMP_TRAIN_FOLDER)/wintri.mlf -s $(TMP_TRAIN_FOLDER)/tri_stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied2 $(TMP_TRAIN_FOLDER)/tiedlist 
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -s $(TMP_TRAIN_FOLDER)/stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied0/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied1 $(TMP_TRAIN_FOLDER)/tiedlist
+	HERest -I $(TMP_TRAIN_FOLDER)/train.mlf -s $(TMP_TRAIN_FOLDER)/stats -S $(TMP_TRAIN_FOLDER)/train.scp -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/macros -H $(TMP_TRAIN_FOLDER)/hmm_tri_tied1/hmmdefs -M $(TMP_TRAIN_FOLDER)/hmm_tri_tied2 $(TMP_TRAIN_FOLDER)/tiedlist 
 	cp $(TMP_TRAIN_FOLDER)/hmm_tri_tied2/* $(TMP_TRAIN_FOLDER)/hmm_final/
 	cp $(TMP_TRAIN_FOLDER)/tiedlist $(TMP_TRAIN_FOLDER)/phones
 
 
-train_triphones: train_tied_triphones
-	@echo "\n>>> estimating the number of mixtures\n"
-	# TODO
+train_triphones: train_tied_triphones train_mixtures
+	@echo "\n>>> Training fully tied triphones with GMM acoustic models\n"
 	
 
 bigram_LM:
@@ -182,14 +186,19 @@ bigram_LM:
 
 test_monophones:
 	@echo "*** testing the monophone trained model ***"
-	HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
-	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
+	HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
 test_monophones_bigram_LM:
 	@echo "*** testing the monophone trained model (with a bigram LM) ***"
-	HVite -w $(TMP_TRAIN_FOLDER)/wdnetbigram -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
-	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
+	HVite -w $(TMP_TRAIN_FOLDER)/wdnetbigram -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
+
+
+results_TIMIT_equiv:
+	@echo "*** interpreting the results with TIMIT classic equivalences ***"
+	HResults -e n en -e aa ao -e ah ax-h -e ah ax -e ih ix -e l el -e sh zh -e uw ux -e er axr -e m em -e n nx -e ng eng -e hh hv -e pau pcl -e pau tcl -e pau kcl -e pau q -e pau bcl -e pau dcl -e pau gcl -e pau epi -e pau sil -e pau !ENTER -e pau !EXIT -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
 test_triphones:
@@ -197,17 +206,17 @@ test_triphones:
 	##HBuild $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/wdnet
 	#HLStats -b $(TMP_TRAIN_FOLDER)/bigram  -s "<s>" "</s>" $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/train.mlf
 	#HBuild -m $(TMP_TRAIN_FOLDER)/bigram -s "<s>" "</s>" $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/wdnet
-	#HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/phones
-	#HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
-	HVite -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
-	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
+	#HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/tri-dict $(TMP_TRAIN_FOLDER)/phones
+	#HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HVite -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
 align:
 	@echo "*** aligning the content of input_scp in output_mlf ***"
 	@echo ">>> you need to have trained a (monophone) model with sentences start & end."
 	@echo "/!\ Currently on monophones /!\" # TODO not only monophones
-	HVite -l '*' -a -m -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -S $(input_scp) -w $(TMP_TRAIN_FOLDER)/wdnet $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones # -f if you want the full states alignment
+	HVite -l $(TMP_TRAIN_FOLDER) -a -m -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -S $(input_scp) -w $(TMP_TRAIN_FOLDER)/wdnet $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones # -f if you want the full states alignment
 
 
 clean:
