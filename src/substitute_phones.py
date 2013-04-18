@@ -42,7 +42,11 @@ foldings = {'ux': 'uw',
             'q': 'sil'} # <- they removed 'Q' (glottal stop), is it ok to sil?
 # http://troylee2008.blogspot.fr/2011/05/asr-complete-matlab-script-for-timit.html classifies 'q' as 'pau' (i.e. pause/silence) too
 
-def process(folder, sentences=False):
+
+
+def process(folder, sentences=False, substitute=True):
+    if not substitute:
+        foldings = {}
     c_before = {}
     c_after = {}
     for d, ds, fs in os.walk(folder):
@@ -95,12 +99,15 @@ if __name__ == '__main__':
             print doc
             sys.exit(0)
         sentences = False
+        substitute = True
         if '--sentences' in sys.argv:
             sentences = True
+        if '--nosubst' in sys.argv:
+            substitute = False
         l = filter(lambda x: not '--' in x[0:2], sys.argv)
         foldername = '.'
         if len(l) > 1:
             foldername = l[1]
-        process(foldername, sentences)
+        process(foldername, sentences, substitute)
     else:
         process('.') # default

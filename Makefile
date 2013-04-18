@@ -16,8 +16,8 @@ prepare: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	python src/timit_to_htk_labels.py $(dataset)/train
 	python src/timit_to_htk_labels.py $(dataset)/test
 	@echo "\n>>> subtitles phones (61 down to 39)\n"
-	python src/substitute_phones.py $(dataset)/train --sentences
-	python src/substitute_phones.py $(dataset)/test --sentences
+	python src/substitute_phones.py $(dataset)/train --sentences --nosubst
+	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
@@ -175,12 +175,20 @@ train_triphones: train_tied_triphones
 
 bigram_LM:
 	@echo "*** Estimating a bigram language model (only with !ENTER & !EXIT) ***"
-	HLStats -b $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/train.mlf
+	# cp $(dataset_train_folder)/train.mlf $(TMP_TRAIN_FOLDER)/train.mlf
+	HLStats -o -b $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/train.mlf
+	HBuild -n $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnetbigram
 
 
 test_monophones:
 	@echo "*** testing the monophone trained model ***"
 	HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
+
+
+test_monophones_bigram_LM:
+	@echo "*** testing the monophone trained model (with a bigram LM) ***"
+	HVite -w $(TMP_TRAIN_FOLDER)/wdnetbigram -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S ~/postdoc/datasets/TIMIT/test/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
 	HResults -I ~/postdoc/datasets/TIMIT/test/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
