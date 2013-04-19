@@ -212,11 +212,20 @@ test_triphones:
 	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
+reco_align:
+	@echo "*** aligning the content of input_scp in output_mlf ***"
+	@echo ">>> you need to have trained a (monophone) model with sentences start & end."
+	@# TODO not only monophones
+	@echo ">>> Using: $(input_scp) , going to $(output_mlf)"
+	HVite -l $(TMP_TRAIN_FOLDER) -a -m -y lab -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -S $(input_scp) $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones # -f if you want the full states alignment
+
+
 align:
 	@echo "*** aligning the content of input_scp in output_mlf ***"
 	@echo ">>> you need to have trained a (monophone) model with sentences start & end."
-	@echo "/!\ Currently on monophones /!\" # TODO not only monophones
-	HVite -l $(TMP_TRAIN_FOLDER) -a -m -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -S $(input_scp) -w $(TMP_TRAIN_FOLDER)/wdnet $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones # -f if you want the full states alignment
+	@# TODO not only monophones
+	@echo ">>> Using: $(input_scp) and $(input_mlf), going to $(output_mlf)"
+	HVite -l $(TMP_TRAIN_FOLDER) -a -m -y lab -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -I $(input_mlf) -S $(input_scp) $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones # -f if you want the full states alignment
 
 
 clean:
