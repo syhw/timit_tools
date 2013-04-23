@@ -1,10 +1,27 @@
 import numpy as np
-import sys
+import sys, math
 import cPickle
+from collections import defaultdict
 
 usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [INPUT_LM] [options: --help]
 """
+
+THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
+epsilon = 1E-10 # degree of precision for floating (0.0-1.0 probas) operations
+
+class Phone:
+    def __init__(self, phn_id, phn):
+        self.phn_id = phn_id
+        self.phn = phn
+        self.to_ind = []
+
+    def update(self, indice):
+        self.to_ind.append(indice)
+
+    def __repr__(self):
+        return self.phn + ": " + str(self.phn_id) + '\n' + str(self.to_ind)
+
 
 def clean(s):
     return s.strip().rstrip('\n')
@@ -18,11 +35,67 @@ def compute_likelihoods(f, gmms):
     pass
 
 
-def parse_lm(f):
-    pass
+def parse_lm(trans, f):
+    """ parse ARPA MIT-LL backed-off bigrams in f """
+    p_1grams = {}
+    b_1grams = {}
+    p_2grams = defaultdict(lambda: {}) # p_2grams[A][B] = unnormalized P(A|B)
+    # parse the file to fill the above dicts
+    parsing1grams = False
+    parsing2grams = False
+    for line in f:
+        if clean(line) == "":
+            continue
+        if "1-grams" in line:
+            parsing1grams = True
+        elif "2-grams" in line:
+            parsing1grams = False
+            parsing2grams = True
+        elif "end" == line[1:4]:
+            break
+        elif parsing1grams: 
+            l = clean(line).split()
+            p_1grams[l[1]] = float(l[0]) # log10 prob
+            if len(l) > 2:
+                b_1grams[l[1]] = float(l[2]) # log10 prob
+            else:
+                b_1grams[l[1]] = -100.0 # guess that's low enough
+        elif parsing2grams:
+            l = clean(line).split()
+            if len(l) != 3:
+                print >> sys.stderr, "bad language model file format"
+                sys.exit(-1)
+            p_2grams[l[1]][l[2]] = float(l[0]) # log10 prob, already discounted
+
+    # do the backed-off probs for p_2grams[phn1][phn2] = P(phn2|phn1)
+    for phn1, d in p_2grams.iteritems():
+        s = 0.0
+        for phn2, log_prob in d.iteritems():
+            # j follows i, p(j)*b(i)
+            if log_prob < p_1grams[phn2] + b_1grams[phn1] \
+                    or log_prob < THRESHOLD_BIGRAMS:
+                p_2grams[phn1][phn2] = p_1grams[phn2] + b_1grams[phn1]
+            s += 10 ** p_2grams[phn1][phn2]
+        s = math.log10(s)
+        for phn2, log_prob in d.iteritems():
+            p_2grams[phn1][phn2] = log_prob - s
+
+    # edit the trans[1] matrix with the backed-off probs,
+    # could do in the above "backed-off probs" loop 
+    # I but prefer to keep it separated
+    for phn1, d in p_2grams.iteritems():
+        phone1 = trans[0][phn1]
+        buffer_prob = 1.0 - trans[1][phone1.to_ind[len(phone1.to_ind) - 1]].sum(0)
+        assert(buffer_prob != 0.0) # you would never go out of this phone (/!\ !EXIT)
+        for phn2, log_prob in d.iteritems():
+            # transition from phn1 to phn2
+            phone2 = trans[0][phn2]
+            trans[1][phone1.to_ind[len(phone1.to_ind) - 1]][phone2.to_ind[0]] = buffer_prob * (10 ** log_prob)
+        assert(1.0 - epsilon < trans[1][phone1.to_ind[len(phone1.to_ind) - 1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
 
 
 def parse_hmm(f):
+    """ parse HTK HMMdefs (chapter 7 of the HTK book) in f """
     l = f.readlines()
     n_phones = 0
     n_states_tot = 0
@@ -34,7 +107,7 @@ def parse_hmm(f):
             # we remove init/end states: eg. 5 means 3 states once connected
     transitions = ({}, np.ndarray((n_states_tot, n_states_tot), 
         dtype='float64'))
-    # transitions = ( t[phn] = (nb_states, id),
+    # transitions = ( t[phn] = Phone,
     #                               | phn1_s1, phn1_s2, phn1_s3, phn2_s1|
     #                     ----------|-----------------------------------|
     #                     | phn1_s1 | proba  , proba  , proba  , proba  |
@@ -42,6 +115,7 @@ def parse_hmm(f):
     #                     | phn1_s3 | proba  , proba  , proba  , proba  |
     #                     | phn2_s1 | proba  , proba  , proba  , proba  |
     #                     -----------------------------------------------  )
+    #             with proba_2 marking the transition from phn1_s1 to phn_s2
     gmms = {}
     #                 <---  mix. comp.  --->
     # gmms[phn] = [ [ [pi_k, mu_k, sigma2_k] , ...] , ...]
@@ -68,16 +142,15 @@ def parse_hmm(f):
                 clean(l[i+1]).split()), dtype='float64'))
         elif '<TRANSP>' in line:
             n_st = int(clean(line).split()[1]) - 2  # we also remove init/end
-            transitions[0][phn] = (n_st, phn_id)
+            transitions[0][phn] = Phone(phn_id, phn)
             for j in xrange(n_st):
-                sys.stdout.flush()
-                transitions[1][phn_id + j] = \
+                transitions[0][phn].update(current_states_numbers + j)
+                transitions[1][current_states_numbers + j] = \
                     [0.0 for tmp_k in xrange(current_states_numbers)] + \
                     map(float, clean(l[i + j + 2]).split()[1:-1]) + \
                     [0.0 for tmp_k in xrange(n_states_tot
                         - current_states_numbers - n_st)]
             current_states_numbers += n_st
-            # TODO do not forget to have transition[1] lines that sum to 1
     #print gmms["!EXIT"][0][0][0] # pi_k of state 0 and mixture comp. 0
     #print gmms["!EXIT"][0][0][1] # mu_k
     #print gmms["!EXIT"][0][0][2] # sigma2_k
@@ -85,9 +158,9 @@ def parse_hmm(f):
     #print gmms["eng"][0][0][1] # mu_k
     #print gmms["eng"][0][0][2] # sigma2_k
     #print transitions[0].keys() # phones
-    #print transitions[0]["!EXIT"] # (n_st, phn_id) -> !EXIT phn_id = 61
+    #print transitions[0]["!EXIT"] # !EXIT phn_id = 61
     #print transitions[1] # all the transitions
-    #print transitions[1][61:64] # last 3 states, i.e. the last phone (!EXIT)
+    #print transitions[1][transitions[0]['aa'].to_ind[2]]
     return transitions, gmms
 
 
