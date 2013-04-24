@@ -5,6 +5,7 @@ import sys, math
 import cPickle
 from collections import defaultdict
 import htkmfc
+import itertools
 from utils import memoized
 
 usage = """
@@ -30,15 +31,61 @@ class Phone:
 def clean(s):
     return s.strip().rstrip('\n')
 
+##def precompute_det_inv(gmms):
+##    # /!\ iteration order is important, this gives us:
+##    # gmms_ = in phones order from gmms and in states order [ ..., 
+##    # [pik_k, mu_k, sigma2_k_det, sigma2_k_inv], ... ]
+##    return (np.array([pi_k  
+##        for _, gm in gmms.iteritems()
+##        for gm_st in gm
+##        for (pi_k, _, _) in gm_st]),
+##            [map(lambda (pi_k, mu_k, sigma2_k): [mu_k, 
+##        linalg.det(np.diag(sigma2_k)), linalg.inv(np.diag(sigma2_k))], gm_st)
+##        for _, gm in gmms.iteritems() # _ is a phone, to be sure about iter
+##        for gm_st in gm])
+##
+##
+##def eval_gauss_mixt(v, gmixt):
+##    def eval_gauss_comp(v, mix_comp):
+##        mu_k, sigma2_k_det, sigma2_k_inv = mix_comp
+##        return ((2 * np.pi * sigma2_k_det) ** (-0.5) 
+##                * math.exp(-0.5 * np.dot((v - mu_k).T, 
+##                    np.dot(sigma2_k_inv, v - mu_k))))
+##    eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
+##    #return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
+##    return np.dot(gmixt[0], np.array(map(eval_gauss_comp_with_v, gmixt[1])))
+
+def precompute_det_inv(gmms):
+    # /!\ iteration order is important, this gives us:
+    # gmms_ = in phones order from gmms and in states order [ ..., 
+    # [pik_k, mu_k, sigma2_k_det, sigma2_k_inv], ... ]
+    return [map(lambda (pi_k, mu_k, sigma2_k): [pi_k, mu_k, 
+        linalg.det(np.diag(sigma2_k)), linalg.inv(np.diag(sigma2_k))], gm_st)
+        for _, gm in gmms.iteritems() # _ is a phone, to be sure about iter
+        for gm_st in gm]
+
 
 def eval_gauss_mixt(v, gmixt):
     def eval_gauss_comp(v, mix_comp):
         pi_k, mu_k, sigma2_k_det, sigma2_k_inv = mix_comp
-        return pi_k * math.exp((2 * np.pi * sigma2_k_det) ** (-0.5) 
+        return pi_k * ((2 * np.pi * sigma2_k_det) ** (-0.5) 
                 * math.exp(-0.5 * np.dot((v - mu_k).T, 
                     np.dot(sigma2_k_inv, v - mu_k))))
     eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
     return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
+
+
+#def eval_gauss_mixt(v, gmixt):
+#    def eval_gauss_comp(v, mix_comp):
+#        pi_k, mu_k, sigma2_k = mix_comp
+#        s = 1.0
+#        for channel, mu, sigma2 in itertools.izip(v, mu_k, sigma2_k):
+#            s *= ((2 * np.pi * sigma2) ** (-0.5)) * math.exp(-0.5 * ((channel - mu) ** 2) / sigma2)
+#            if s < epsilon:
+#                return 0.0
+#        return pi_k * s
+#    eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
+#    return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
 
 
 def viterbi(posteriors, transitions):
@@ -46,20 +93,14 @@ def viterbi(posteriors, transitions):
     pass
 
 
-def compute_likelihoods(n_states, mat, gmms):
+def compute_likelihoods(n_states, mat, gmms_):
     #print mat.shape
     ret = np.ndarray((mat.shape[0], n_states))
     ret[:] = 0.0
-    # /!\ iteration order is important, this gives us:
-    # gmms_ = in phones order from gmms and in states order [ ..., 
-    # [pik_k, mu_k, sigma2_k_det, sigma2_k_inv], ... ]
-    gmms_ = [map(lambda (pi_k, mu_k, sigma2_k): [pi_k, mu_k, 
-        linalg.det(np.diag(sigma2_k)), linalg.inv(np.diag(sigma2_k))], gm_st)
-        for _, gm in gmms.iteritems() # _ is a phone, to be sure about iter
-        for gm_st in gm]
-    for i, line in enumerate(mat):
+    for i in xrange(mat.shape[0]):
         print i
-        ret[i] = [eval_gauss_mixt(line, gm_phn_st) for gm_phn_st in gmms_]
+        eval_gauss_mixt_with_line = functools.partial(eval_gauss_mixt, mat[i])
+        ret[i] = map(eval_gauss_mixt_with_line, gmms_)
     return ret
 
 
@@ -206,14 +247,17 @@ def process(ofname, iscpfname, ihmmfname, ilmfname):
             ilmf.close()
         iscpf = open(iscpfname)
         
+        gmms_ = precompute_det_inv(gmms)
+        #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
         for line in iscpf:
             cline = clean(line)
             of.write('"' + cline[:-3] + '.lab"\n')
             print cline
             posteriors = compute_likelihoods(n_states,
-                    htkmfc.open(cline).getall(), gmms)
+                    htkmfc.open(cline).getall(), gmms_)
             viterbi(posteriors, transitions)
             of.write('.\n')
+            sys.exit(0)
 
         iscpf.close()
 
