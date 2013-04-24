@@ -1,7 +1,11 @@
 import numpy as np
+from numpy import linalg
+import functools
 import sys, math
 import cPickle
 from collections import defaultdict
+import htkmfc
+from utils import memoized
 
 usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [INPUT_LM] [options: --help]
@@ -27,12 +31,36 @@ def clean(s):
     return s.strip().rstrip('\n')
 
 
+def eval_gauss_mixt(v, gmixt):
+    def eval_gauss_comp(v, mix_comp):
+        pi_k, mu_k, sigma2_k_det, sigma2_k_inv = mix_comp
+        return pi_k * math.exp((2 * np.pi * sigma2_k_det) ** (-0.5) 
+                * math.exp(-0.5 * np.dot((v - mu_k).T, 
+                    np.dot(sigma2_k_inv, v - mu_k))))
+    eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
+    return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
+
+
 def viterbi(posteriors, transitions):
+    # TODO
     pass
 
 
-def compute_likelihoods(f, gmms):
-    pass
+def compute_likelihoods(n_states, mat, gmms):
+    #print mat.shape
+    ret = np.ndarray((mat.shape[0], n_states))
+    ret[:] = 0.0
+    # /!\ iteration order is important, this gives us:
+    # gmms_ = in phones order from gmms and in states order [ ..., 
+    # [pik_k, mu_k, sigma2_k_det, sigma2_k_inv], ... ]
+    gmms_ = [map(lambda (pi_k, mu_k, sigma2_k): [pi_k, mu_k, 
+        linalg.det(np.diag(sigma2_k)), linalg.inv(np.diag(sigma2_k))], gm_st)
+        for _, gm in gmms.iteritems() # _ is a phone, to be sure about iter
+        for gm_st in gm]
+    for i, line in enumerate(mat):
+        print i
+        ret[i] = [eval_gauss_mixt(line, gm_phn_st) for gm_phn_st in gmms_]
+    return ret
 
 
 def parse_lm(trans, f):
@@ -151,6 +179,7 @@ def parse_hmm(f):
                     [0.0 for tmp_k in xrange(n_states_tot
                         - current_states_numbers - n_st)]
             current_states_numbers += n_st
+    assert(n_states_tot == current_states_numbers)
     #print gmms["!EXIT"][0][0][0] # pi_k of state 0 and mixture comp. 0
     #print gmms["!EXIT"][0][0][1] # mu_k
     #print gmms["!EXIT"][0][0][2] # sigma2_k
@@ -161,23 +190,32 @@ def parse_hmm(f):
     #print transitions[0]["!EXIT"] # !EXIT phn_id = 61
     #print transitions[1] # all the transitions
     #print transitions[1][transitions[0]['aa'].to_ind[2]]
-    return transitions, gmms
+    return n_states_tot, transitions, gmms
 
 
 def process(ofname, iscpfname, ihmmfname, ilmfname):
     with open(ofname, 'w') as of:
+        of.write('#!MLF!#\n')
         ihmmf = open(ihmmfname)
         ilmf = None
-        transitions, gmms = parse_hmm(ihmmf)
+        n_states, transitions, gmms = parse_hmm(ihmmf)
         ihmmf.close()
         if ilmfname != None:
             ilmf = open(input_lm_fname)
             transitions = parse_lm(transitions, ilmf)
             ilmf.close()
         iscpf = open(iscpfname)
-        posteriors = compute_likelihoods(iscpf, gmms)
+        
+        for line in iscpf:
+            cline = clean(line)
+            of.write('"' + cline[:-3] + '.lab"\n')
+            print cline
+            posteriors = compute_likelihoods(n_states,
+                    htkmfc.open(cline).getall(), gmms)
+            viterbi(posteriors, transitions)
+            of.write('.\n')
+
         iscpf.close()
-        of = viterbi(posteriors, transitions)
 
 
 if __name__ == "__main__":
