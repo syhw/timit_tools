@@ -33,113 +33,67 @@ class Phone:
 def clean(s):
     return s.strip().rstrip('\n')
 
-##def precompute_det_inv(gmms):
-##    # /!\ iteration order is important, this gives us:
-##    # gmms_ = in phones order from gmms and in states order [ ..., 
-##    # [pik_k, mu_k, sigma2_k_det, sigma2_k_inv], ... ]
-##    return (np.array([pi_k  
-##        for _, gm in gmms.iteritems()
-##        for gm_st in gm
-##        for (pi_k, _, _) in gm_st]),
-##            [map(lambda (pi_k, mu_k, sigma2_k): [mu_k, 
-##        linalg.det(np.diag(sigma2_k)), linalg.inv(np.diag(sigma2_k))], gm_st)
-##        for _, gm in gmms.iteritems() # _ is a phone, to be sure about iter
-##        for gm_st in gm])
-##
-##
-##def eval_gauss_mixt(v, gmixt):
-##    def eval_gauss_comp(v, mix_comp):
-##        mu_k, sigma2_k_det, sigma2_k_inv = mix_comp
-##        return ((2 * np.pi * sigma2_k_det) ** (-0.5) 
-##                * math.exp(-0.5 * np.dot((v - mu_k).T, 
-##                    np.dot(sigma2_k_inv, v - mu_k))))
-##    eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
-##    #return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
-##    return np.dot(gmixt[0], np.array(map(eval_gauss_comp_with_v, gmixt[1])))
 
-#def precompute_det_inv(gmms):
-#    # /!\ iteration order is important, this gives us:
-#    # gmms_ = in phones order from gmms and in states order [ ..., 
-#    # [pik_k, mu_k, sigma2_k_det, sigma2_k_inv], ... ]
-#    return [map(lambda (pi_k, mu_k, sigma2_k): [pi_k, mu_k, 
-#        (2 * np.pi * linalg.det(np.diag(sigma2_k))) ** (-0.5), 
-#        linalg.inv(np.diag(sigma2_k))], gm_st)
-#        for _, gm in gmms.iteritems() # _ is a phone, to be sure about iter
-#        for gm_st in gm]
-#
+def eval_gauss_mixt(v, gmixt):
+    """ UNTESTED """ # TODO re-test since change
+    #def eval_gauss_comp(v, mix_comp):
+    def eval_gauss_comp(mix_comp):
+        pi_k, mu_k, sigma2_k_inv = mix_comp
+        return pi_k * math.exp(-0.5 * np.dot((v - mu_k).T, 
+                    np.dot(sigma2_k_inv, v - mu_k)))
+    #eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
+    #return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
+    return reduce(lambda x, y: x + y, map(eval_gauss_comp, gmixt))
 
-#def eval_gauss_mixt(v, gmixt):
-#    #def eval_gauss_comp(v, mix_comp):
-#    def eval_gauss_comp(mix_comp):
-#        pi_k, mu_k, first_term, sigma2_k_inv = mix_comp
-#        return pi_k * first_term 
-#                * math.exp(-0.5 * np.dot((v - mu_k).T, 
-#                    np.dot(sigma2_k_inv, v - mu_k))))
-#    #eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
-#    #return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
-#    return reduce(lambda x, y: x + y, map(eval_gauss_comp, gmixt))
-
-
-#def compute_likelihoods(n_states, mat, gmms_):
-#    #print mat.shape
-#    ret = np.ndarray((mat.shape[0], n_states))
-#    ret[:] = 0.0
-#    for i in xrange(mat.shape[0]):
-#        print i
-#        eval_gauss_mixt_with_line = functools.partial(eval_gauss_mixt, mat[i])
-#        ret[i] = map(eval_gauss_mixt_with_line, gmms_)
-#    return ret
-
-
-##def eval_gauss_mixt(v, gmixt):
-##    def eval_gauss_comp(v, mix_comp):
-##        pi_k, mu_k, sigma2_k = mix_comp
-##        s = 1.0
-##        for channel, mu, sigma2 in itertools.izip(v, mu_k, sigma2_k):
-##            s *= ((2 * np.pi * sigma2) ** (-0.5)) * math.exp(-0.5 * ((channel - mu) ** 2) / sigma2)
-##            if s < epsilon:
-##                return 0.0
-##        return pi_k * s
-##    eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
-##    return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
 
 def precompute_det_inv(gmms):
     # /!\ iteration order is important, this gives us:
-    # gmms_ = in phones order from gmms and in states order [ ..., 
-    # [pik_k, mu_k, sigma2_k_det, sigma2_k_inv], ... ]
     ret = []
-    for _, gm in gmms.iteration():
+    for _, gm in gmms.iteritems():
         for gm_st in gm:
             pi_k = []
+            mu_k = []
+            inv_sqrt_det_sigma2 = []
+            inv_sigma2 = []
             for component in gm_st:
                 pi_k.append(component[0])
-            ret.append(np.array(pi_k), 
-            
-
-
-
-    return [map(lambda (pi_k, mu_k, sigma2_k): [pi_k, mu_k, 
-        (2 * np.pi * linalg.det(np.diag(sigma2_k))) ** (-0.5), 
-        linalg.inv(np.diag(sigma2_k))], gm_st)
-        for _, gm in gmms.iteritems() # _ is a phone, to be sure about iter
-        for gm_st in gm]
+                mu_k.append(component[1])
+                sigma2_k = component[2]
+                inv_sqrt_det_sigma2.append((2 * np.pi * linalg.det(np.diag(sigma2_k))) ** (-0.5))
+                inv_sigma2.append(linalg.inv(np.diag(sigma2_k)))
+            ret.append((np.array(pi_k) * np.array(inv_sqrt_det_sigma2), 
+                    np.array(mu_k).T, 
+                    np.array(inv_sigma2).T))
+    return ret
 
 
 def compute_likelihoods(n_states, mat, gmms_):
-    from scipy.stats import norm
-    #gmms_ = map(lambda l: map(lambda (pi_k, mu_k, sigma2_k): (pi_k, norm(loc=mu_k, scale=math.sqrt(sigma2_k))), l), gmms_)
-    mixtures = [] # in phones and state order
-    for gm_st in gmms_:
-        mixtures.append((np.array([gm[0] for gm in gm_st]), [norm(loc=gm[1][i], scale=math.sqrt(gm[2][i])) for gm in gm_st for i in range(len(gm[1]))]))
     ret = np.ndarray((mat.shape[0], n_states))
     ret[:] = 0.0
-    for state_id, mixture in enumerate(mixtures):
-        tmp = np.array([[comp.pdf(mat[:, coeff_id]) for coeff_id in xrange(mat.shape[1])] for comp in mixture[1]])
-        tmp = tmp.prod(axis=1)
-        print mixture[0].shape
-        print tmp.shape
-        sys.stdout.flush()
-        ret[:, state_id] = np.dot(mixture[0], tmp)
+    for state_id, mixture in enumerate(gmms_):
+        pis, mus, inv_sigmas = mixture
+        assert(pis.shape[0] == mus.shape[1])
+        assert(pis.shape[0] == inv_sigmas.shape[2])
+        
+        #pi_mat = np.ndarray((mat.shape[0], pis.shape[0]))
+        #pi_mat[:,] = pis
+        #print "pi_mat", pi_mat.shape
+        x_minus_mus = np.ndarray((mat.shape[0], mus.shape[0], mus.shape[1]))
+        ##print "x_minus_mus", x_minus_mus.shape
+        ##print "mat", mat.shape
+        x_minus_mus.T[:,] = mat.T
+        ##print "x_minus_mus", x_minus_mus.shape
+        x_minus_mus -= mus
+        ##print "x_minus_mus", x_minus_mus.shape
+        ##print "inv_sigmas", inv_sigmas.shape
+        #np.einsum('ik...,jk...', inv_sigmas, x_minus_mus)
+        components = np.einsum('ik...,...km->i...', x_minus_mus[:,:,0], np.einsum('ik...,jk...', inv_sigmas, x_minus_mus))
+        ##print "components", components.shape
+        #print np.dot(components, pis)
+        #import code
+        #code.interact(local=locals())
+        ret[:, state_id] = np.dot(components, pis)
+    #print ret
     return ret
 
 
@@ -317,8 +271,8 @@ def process(ofname, iscpfname, ihmmfname, ilmfname):
             ilmf.close()
         iscpf = open(iscpfname)
         
-        #gmms_ = precompute_det_inv(gmms)
-        gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
+        gmms_ = precompute_det_inv(gmms)
+        #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
         for line in iscpf:
             cline = clean(line)
             of.write('"' + cline[:-3] + '.lab"\n')
