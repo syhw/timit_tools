@@ -68,32 +68,23 @@ def precompute_det_inv(gmms):
 
 
 def compute_likelihoods(n_states, mat, gmms_):
+    # HUGE TODO: optimize that
     ret = np.ndarray((mat.shape[0], n_states))
     ret[:] = 0.0
     for state_id, mixture in enumerate(gmms_):
         pis, mus, inv_sigmas = mixture
+        # N_mixtures = len(pis) = mus.shape[1] = inv_sigmas.shape[2]
+        # N_features = mus.shape[0] = inv_sigmas.shape[0|1]
         assert(pis.shape[0] == mus.shape[1])
         assert(pis.shape[0] == inv_sigmas.shape[2])
-        
-        #pi_mat = np.ndarray((mat.shape[0], pis.shape[0]))
-        #pi_mat[:,] = pis
-        #print "pi_mat", pi_mat.shape
         x_minus_mus = np.ndarray((mat.shape[0], mus.shape[0], mus.shape[1]))
-        ##print "x_minus_mus", x_minus_mus.shape
-        ##print "mat", mat.shape
         x_minus_mus.T[:,] = mat.T
-        ##print "x_minus_mus", x_minus_mus.shape
         x_minus_mus -= mus
-        ##print "x_minus_mus", x_minus_mus.shape
-        ##print "inv_sigmas", inv_sigmas.shape
-        #np.einsum('ik...,jk...', inv_sigmas, x_minus_mus)
-        components = np.einsum('ik...,...km->i...', x_minus_mus[:,:,0], np.einsum('ik...,jk...', inv_sigmas, x_minus_mus))
-        ##print "components", components.shape
-        #print np.dot(components, pis)
+        components = np.einsum('ik...,...km->i...', x_minus_mus[:,:,0], 
+                np.einsum('ik...,jk...', inv_sigmas, x_minus_mus))
         #import code
         #code.interact(local=locals())
         ret[:, state_id] = np.dot(components, pis)
-    #print ret
     return ret
 
 
@@ -108,7 +99,7 @@ def online_viterbi(n_states, mat, gmms_, transitions):
     t[0] = map(functools.partial(eval_gauss_mixt, mat[0]), gmms_)
     backpointers = np.ndarray((mat.shape[0], n_states))
     backpointers[:] = 0.0
-    nonnulls = [j for j, val in enumerate(t[0]) if val > epsilon]
+    nonnulls = [j for j, val in enumerate(t[0]) if val > 0]
     for i in xrange(1, mat.shape[0]):
         print i
         for j in nonnulls:
@@ -124,7 +115,7 @@ def online_viterbi(n_states, mat, gmms_, transitions):
                     max_ind = k
             t[i][j] = max_
             backpointers[i][j] = max_ind
-        nonnulls = [i for i, val in enumerate(t[i]) if val > epsilon]
+        nonnulls = [i for i, val in enumerate(t[i]) if val > 0]
     return t, backpointers
 
 
@@ -277,11 +268,11 @@ def process(ofname, iscpfname, ihmmfname, ilmfname):
             cline = clean(line)
             of.write('"' + cline[:-3] + '.lab"\n')
             print cline
-            posteriors = compute_likelihoods(n_states,
-                    htkmfc.open(cline).getall(), gmms_)
-            viterbi(posteriors, transitions)
-            #online_viterbi(n_states, htkmfc.open(cline).getall(), 
-            #        gmms_, transitions)
+            #posteriors = compute_likelihoods(n_states,
+            #        htkmfc.open(cline).getall(), gmms_)
+            #viterbi(posteriors, transitions)
+            online_viterbi(n_states, htkmfc.open(cline).getall(), 
+                    gmms_, transitions)
             of.write('.\n')
             sys.exit(0)
 
