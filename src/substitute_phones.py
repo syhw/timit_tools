@@ -65,11 +65,11 @@ def process(folder, sentences=False, substitute=True):
                 tmpline = line
                 if sentences:
                     if not saw_pause:
-                        tmpline = tmpline.replace('h#', '!ENTER')
-                        tmpline = tmpline.replace('sil', '!ENTER')
+                        tmpline = tmpline.replace('h#', '!ENTER') # TODO check with other corpus
+                        #tmpline = tmpline.replace('sil', '!ENTER')
                     else:
                         tmpline = tmpline.replace('h#', '!EXIT')
-                        tmpline = tmpline.replace('sil', '!EXIT')
+                        #tmpline = tmpline.replace('sil', '!EXIT')
                 tmpline = tmpline.replace('-', '')
                 tmp = tmpline.split()
                 for k, v in foldings.iteritems():

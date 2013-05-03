@@ -3,9 +3,9 @@ from numpy import linalg
 import functools
 import sys, math
 #import cPickle
-from collections import defaultdict
+from collections import defaultdict, deque
 import htkmfc
-#import itertools
+import itertools
 #from utils import memoized
 #import multiprocessing
 #pool = multiprocessing.Pool()
@@ -36,14 +36,13 @@ def clean(s):
 
 def eval_gauss_mixt(v, gmixt):
     """ UNTESTED """ # TODO re-test since change
-    #def eval_gauss_comp(v, mix_comp):
-    def eval_gauss_comp(mix_comp):
+    assert(len(gmixt[0]) == gmixt[1].shape[0] == gmixt[2].shape[0])
+    def eval_gauss_comp(mix_comp): # closure
         pi_k, mu_k, sigma2_k_inv = mix_comp
         return pi_k * math.exp(-0.5 * np.dot((v - mu_k).T, 
                     np.dot(sigma2_k_inv, v - mu_k)))
-    #eval_gauss_comp_with_v = functools.partial(eval_gauss_comp, v)
-    #return reduce(lambda x, y: x + y, map(eval_gauss_comp_with_v, gmixt))
-    return reduce(lambda x, y: x + y, map(eval_gauss_comp, gmixt))
+    return reduce(lambda x, y: x + y, map(eval_gauss_comp, 
+        itertools.izip(gmixt[0], gmixt[1], gmixt[2])))
 
 
 def precompute_det_inv(gmms):
@@ -67,8 +66,12 @@ def precompute_det_inv(gmms):
     return ret
 
 
+#@profile
 def compute_likelihoods(n_states, mat, gmms_):
-    # HUGE TODO: optimize that
+    # HUGE TODO: optimize that whole function
+    #import scipy.io
+    #scipy.io.savemat('sa1.mat', mdict={'arr': mat})
+    #scipy.io.savemat('gmms.mat', mdict={'arr': gmms_})
     ret = np.ndarray((mat.shape[0], n_states))
     ret[:] = 0.0
     for state_id, mixture in enumerate(gmms_):
@@ -80,11 +83,16 @@ def compute_likelihoods(n_states, mat, gmms_):
         x_minus_mus = np.ndarray((mat.shape[0], mus.shape[0], mus.shape[1]))
         x_minus_mus.T[:,] = mat.T
         x_minus_mus -= mus
+        #components = np.einsum('ik...,...km->i...', x_minus_mus[:,:,0], 
+        #        np.einsum('ik...,jk...', inv_sigmas, x_minus_mus))
+        tmp = np.einsum('ik...,jk...', inv_sigmas, x_minus_mus)
         components = np.einsum('ik...,...km->i...', x_minus_mus[:,:,0], 
-                np.einsum('ik...,jk...', inv_sigmas, x_minus_mus))
-        #import code
-        #code.interact(local=locals())
+                tmp)
+        import code
+        code.interact(local=locals())
         ret[:, state_id] = np.dot(components, pis)
+    print ret
+    print ret[0]
     return ret
 
 
@@ -93,30 +101,58 @@ def viterbi(posteriors, transitions):
     pass
 
 
+def phones_mapping(gmms):
+    map_states_to_phones = {}
+    i = 0
+    for phn, gm in gmms.iteritems():
+        st_id = 2
+        for gm_st in gm:
+            map_states_to_phones[i] = phn + "[" + str(st_id) + "]"
+            i += 1
+            st_id += 1
+    return map_states_to_phones
+
+
+def string_mlf(map_states_to_phones, input_lab, states):
+    s = []
+    for i, line in enumerate(open(input_lab)): # TODO change/remove input_lab
+        s.append(' '.join(line.split()[:-1] + [map_states_to_phones[states[i][0]], str(states[i][1])])) # TODO correct timings with forced alignment
+    s.append('')
+    return '\n'.join(s)
+
+
 def online_viterbi(n_states, mat, gmms_, transitions):
+    # transform to from e.g. (sigma2_invs) 39*39*17 to 17*39*39
+    g = map(lambda (pis, mus, sigma2_invs): (pis, mus.T, sigma2_invs.T), gmms_) 
     t = np.ndarray((mat.shape[0], n_states))
-    t[:] = 0.0
-    t[0] = map(functools.partial(eval_gauss_mixt, mat[0]), gmms_)
-    backpointers = np.ndarray((mat.shape[0], n_states))
-    backpointers[:] = 0.0
-    nonnulls = [j for j, val in enumerate(t[0]) if val > 0]
+    t[:] = -100000.0 # log
+    t[0] = map(math.log, map(functools.partial(eval_gauss_mixt, mat[0]), g)) # log
+    backpointers = np.ndarray((mat.shape[0]-1, n_states), dtype=int)
+    backpointers[:] = -1
+    nonnulls = [jj for jj, val in enumerate(t[0]) if val > -100000.0] # log
     for i in xrange(1, mat.shape[0]):
-        print i
-        for j in nonnulls:
-            max_ = -1.0
-            max_ind = -1
-            for k in xrange(n_states):
-                if transitions[1][j][k] == 0.0:
+        for j in xrange(n_states):
+            max_ = -100000.0 # log
+            max_ind = -2
+            for k in nonnulls:
+                if transitions[1][k][j] == 0.0:
                     continue
-                tmp_prob = (t[i-1][j] * transitions[1][j][k] 
-                        * eval_gauss_mixt(mat[i], gmms_))
+                tmp_prob = (t[i-1][k] + math.log(transitions[1][k][j]) # log
+                        + math.log(eval_gauss_mixt(mat[i], g[j])))     # log
                 if tmp_prob > max_:
                     max_ = tmp_prob
                     max_ind = k
-            t[i][j] = max_
-            backpointers[i][j] = max_ind
-        nonnulls = [i for i, val in enumerate(t[i]) if val > 0]
-    return t, backpointers
+            t[i][j] = max_ # log
+            backpointers[i-1][j] = max_ind
+        nonnulls = [jj for jj, val in enumerate(t[i]) if val > -100000.0] # log
+        if len(nonnulls) == 0:
+            print >> sys.stderr, ">>>>>>>>> NONNULLS IS EMPTY", i, mat.shape[0]
+    states = deque([(t[mat.shape[0]-1].argmax(), t[mat.shape[0]-1].max())])
+    for i in xrange(mat.shape[0] - 2, -1, -1):
+        states.appendleft((backpointers[i][states[0][0]], t[i][backpointers[i][states[0][0]]]))
+        #states.appendleft((t[i].argmax(), t[i].max()))
+    return states
+    #return t, backpointers
 
 
 def parse_lm(trans, f):
@@ -150,7 +186,6 @@ def parse_lm(trans, f):
                 print >> sys.stderr, "bad language model file format"
                 sys.exit(-1)
             p_2grams[l[1]][l[2]] = float(l[0]) # log10 prob, already discounted
-
     # do the backed-off probs for p_2grams[phn1][phn2] = P(phn2|phn1)
     for phn1, d in p_2grams.iteritems():
         s = 0.0
@@ -163,7 +198,6 @@ def parse_lm(trans, f):
         s = math.log10(s)
         for phn2, log_prob in d.iteritems():
             p_2grams[phn1][phn2] = log_prob - s
-
     # edit the trans[1] matrix with the backed-off probs,
     # could do in the above "backed-off probs" loop 
     # I but prefer to keep it separated
@@ -176,6 +210,7 @@ def parse_lm(trans, f):
             phone2 = trans[0][phn2]
             trans[1][phone1.to_ind[len(phone1.to_ind) - 1]][phone2.to_ind[0]] = buffer_prob * (10 ** log_prob)
         assert(1.0 - epsilon < trans[1][phone1.to_ind[len(phone1.to_ind) - 1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
+    return trans
 
 
 def parse_hmm(f):
@@ -250,33 +285,40 @@ def parse_hmm(f):
 
 
 def process(ofname, iscpfname, ihmmfname, ilmfname):
+    ihmmf = open(ihmmfname)
+    ilmf = None
+    n_states, transitions, gmms = parse_hmm(ihmmf)
+    ihmmf.close()
+    if ilmfname != None:
+        ilmf = open(input_lm_fname)
+        transitions = parse_lm(transitions, ilmf)
+        ilmf.close()
+    iscpf = open(iscpfname)
+    
+    gmms_ = precompute_det_inv(gmms)
+    map_states_to_phones = phones_mapping(gmms)
+    #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
+    list_mlf_string = []
+    for line_number, line in enumerate(iscpf): # TODO parallelize (pool.map for instance)
+        cline = clean(line)
+        print cline
+        posteriors = compute_likelihoods(n_states,
+                htkmfc.open(cline).getall(), gmms_)
+        #viterbi(posteriors, transitions)
+        #s = '"' + cline[:-3] + 'lab"\n' + \
+        #        string_mlf(map_states_to_phones,
+        #                cline[:-3] + 'lab',
+        #                online_viterbi(n_states, htkmfc.open(cline).getall(), 
+        #                gmms_, transitions)) + \
+        #        '.\n'
+        #list_mlf_string.append(s)
+        if line_number > 0: # TODO remove
+            break
+    iscpf.close()
     with open(ofname, 'w') as of:
         of.write('#!MLF!#\n')
-        ihmmf = open(ihmmfname)
-        ilmf = None
-        n_states, transitions, gmms = parse_hmm(ihmmf)
-        ihmmf.close()
-        if ilmfname != None:
-            ilmf = open(input_lm_fname)
-            transitions = parse_lm(transitions, ilmf)
-            ilmf.close()
-        iscpf = open(iscpfname)
-        
-        gmms_ = precompute_det_inv(gmms)
-        #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
-        for line in iscpf:
-            cline = clean(line)
-            of.write('"' + cline[:-3] + '.lab"\n')
-            print cline
-            #posteriors = compute_likelihoods(n_states,
-            #        htkmfc.open(cline).getall(), gmms_)
-            #viterbi(posteriors, transitions)
-            online_viterbi(n_states, htkmfc.open(cline).getall(), 
-                    gmms_, transitions)
-            of.write('.\n')
-            sys.exit(0)
-
-        iscpf.close()
+        for line in list_mlf_string:
+            of.write(line)
 
 
 if __name__ == "__main__":

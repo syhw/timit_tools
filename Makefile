@@ -225,7 +225,8 @@ align:
 	@echo ">>> you need to have trained a (monophone) model with sentences start & end."
 	@# TODO not only monophones
 	@echo ">>> Using: $(input_scp) and $(input_mlf), going to $(output_mlf)"
-	HVite -l $(TMP_TRAIN_FOLDER) -a -m -y lab -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -I $(input_mlf) -S $(input_scp) $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones # -f if you want the full states alignment
+	HVite -l $(TMP_TRAIN_FOLDER) -a -m -y lab -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -I $(input_mlf) -S $(input_scp) $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones 
+	# -f if you want the full states alignment, -o C for likelihoods by phone, see p.326 in the HTK book
 
 
 clean:
