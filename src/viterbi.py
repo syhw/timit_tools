@@ -88,12 +88,15 @@ def compute_likelihoods(n_states, mat, gmms_):
         tmp = np.einsum('ik...,jk...', inv_sigmas, x_minus_mus)
         components = np.einsum('ik...,...km->i...', x_minus_mus[:,:,0], 
                 tmp)
-        import code
-        code.interact(local=locals())
+        #import code
+        #code.interact(local=locals())
         ret[:, state_id] = np.dot(components, pis)
     print ret
     print ret[0]
+    print ret[-1]
     return ret
+
+
 
 
 def viterbi(posteriors, transitions):
