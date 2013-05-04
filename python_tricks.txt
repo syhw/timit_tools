@@ -1,0 +1,19 @@
+import scipy.io
+scipy.io.savemat('sa1.mat', mdict={'arr': mat})
+scipy.io.savemat('gmms.mat', mdict={'arr': gmms_})
+# export to matlab
+
+components = np.exp(np.einsum('ik...,...km->i...', x_minus_mus[:,:,0],  
+        np.einsum('ik...,jk...', inv_sigmas, x_minus_mus)))
+# the first einsum is way too slow
+
+import code
+code.interact(local=locals()) # gives a REPL
+
+@profile # works with kernprof.py -l -v
+
+import multiprocessing
+pool = multiprocessing.Pool()
+pool.map(your_function, your_list)
+# easy parallel map, `your_function` has to be pickle-able, for more info see
+# http://docs.python.org/2/library/multiprocessing.html#using-a-pool-of-workers

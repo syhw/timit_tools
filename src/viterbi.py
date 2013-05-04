@@ -6,9 +6,6 @@ import sys, math
 from collections import defaultdict, deque
 import htkmfc
 import itertools
-#from utils import memoized
-#import multiprocessing
-#pool = multiprocessing.Pool()
 
 usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [INPUT_LM] [options: --help]
@@ -58,50 +55,36 @@ def precompute_det_inv(gmms):
                 pi_k.append(component[0])
                 mu_k.append(component[1])
                 sigma2_k = component[2]
-                inv_sqrt_det_sigma2.append((2 * np.pi * linalg.det(np.diag(sigma2_k))) ** (-0.5))
-                inv_sigma2.append(linalg.inv(np.diag(sigma2_k)))
+                inv_sqrt_det_sigma2.append(1.0 / np.sqrt(linalg.det(2 * np.pi * np.diag(sigma2_k))))
+                inv_sigma2.append(1.0 / np.array(sigma2_k))
+                assert((inv_sigma2[-1] == np.diag(linalg.inv(np.diag(sigma2_k)))).all())
+                #inv_sigma2.append(linalg.inv(np.diag(sigma2_k)))
             ret.append((np.array(pi_k) * np.array(inv_sqrt_det_sigma2), 
                     np.array(mu_k).T, 
                     np.array(inv_sigma2).T))
     return ret
 
 
-#@profile
 def compute_likelihoods(n_states, mat, gmms_):
-    # HUGE TODO: optimize that whole function
-    #import scipy.io
-    #scipy.io.savemat('sa1.mat', mdict={'arr': mat})
-    #scipy.io.savemat('gmms.mat', mdict={'arr': gmms_})
     ret = np.ndarray((mat.shape[0], n_states))
     ret[:] = 0.0
     for state_id, mixture in enumerate(gmms_):
         pis, mus, inv_sigmas = mixture
-        # N_mixtures = len(pis) = mus.shape[1] = inv_sigmas.shape[2]
-        # N_features = mus.shape[0] = inv_sigmas.shape[0|1]
+        # N_mixtures = len(pis) = mus.shape[1] = inv_sigmas.shape[1]
+        # N_features = mus.shape[0] = inv_sigmas.shape[0]
         assert(pis.shape[0] == mus.shape[1])
-        assert(pis.shape[0] == inv_sigmas.shape[2])
+        assert(pis.shape[0] == inv_sigmas.shape[1])
         x_minus_mus = np.ndarray((mat.shape[0], mus.shape[0], mus.shape[1]))
         x_minus_mus.T[:,] = mat.T
         x_minus_mus -= mus
-        #components = np.einsum('ik...,...km->i...', x_minus_mus[:,:,0], 
-        #        np.einsum('ik...,jk...', inv_sigmas, x_minus_mus))
-        tmp = np.einsum('ik...,jk...', inv_sigmas, x_minus_mus)
-        components = np.einsum('ik...,...km->i...', x_minus_mus[:,:,0], 
-                tmp)
-        #import code
-        #code.interact(local=locals())
-        ret[:, state_id] = np.dot(components, pis)
+        x_minus_mus = x_minus_mus ** 2
+        x_minus_mus *= inv_sigmas
+        components = np.exp(-0.5 * x_minus_mus.sum(axis=1))
+        ret[:, state_id] = np.log(np.dot(components, pis))
     print ret
     print ret[0]
-    print ret[-1]
+    print ret[1]
     return ret
-
-
-
-
-def viterbi(posteriors, transitions):
-    # TODO
-    pass
 
 
 def phones_mapping(gmms):
@@ -116,20 +99,62 @@ def phones_mapping(gmms):
     return map_states_to_phones
 
 
-def string_mlf(map_states_to_phones, input_lab, states):
+def string_mlf(map_states_to_phones, states):
     s = []
-    for i, line in enumerate(open(input_lab)): # TODO change/remove input_lab
-        s.append(' '.join(line.split()[:-1] + [map_states_to_phones[states[i][0]], str(states[i][1])])) # TODO correct timings with forced alignment
+    for state, prob in states: # TODO change/remove input_lab
+        s.append(' '.join([map_states_to_phones[state], str(prob)])) # TODO correct timings with forced alignment
     s.append('')
     return '\n'.join(s)
 
 
+def viterbi(posteriors, transitions, map_states_to_phones):
+    starting_state = None
+    ending_state = None
+    for state, phone in map_states_to_phones.iteritems():
+        if phone == '!ENTER[2]':
+            starting_state = state
+        if phone == '!EXIT[4]':
+            ending_state = state
+    t = np.ndarray((posteriors.shape[0], posteriors.shape[1]))
+    t[:] = -100000.0 # log
+    t[0] = posteriors[0] # log
+    backpointers = np.ndarray((posteriors.shape[0]-1, posteriors.shape[1]), 
+            dtype=int)
+    backpointers[:] = -1
+    nonnulls = [starting_state] # log
+    for i in xrange(1, posteriors.shape[0]):
+        for j in xrange(posteriors.shape[1]):
+            max_ = -100000.0 # log
+            max_ind = -2
+            for k in nonnulls:
+                if transitions[1][k][j] == 0.0:
+                    continue
+                tmp_prob = (posteriors[i-1][k] + math.log(transitions[1][k][j]) # log
+                        + posteriors[i][j]) # log
+                if tmp_prob > max_:
+                    max_ = tmp_prob
+                    max_ind = k
+            t[i][j] = max_ # log
+            backpointers[i-1][j] = max_ind
+        nonnulls = [jj for jj, val in enumerate(t[i]) if val > -100000.0] # log
+        if len(nonnulls) == 0:
+            print >> sys.stderr, ">>>>>>>>> NONNULLS IS EMPTY", i, mat.shape[0]
+    #states = deque([(t[posteriors.shape[0]-1].argmax(), t[posteriors.shape[0]-1].max())])
+    states = deque([(ending_state, t[posteriors.shape[0]-1][ending_state])])
+    for i in xrange(posteriors.shape[0] - 2, -1, -1):
+        states.appendleft((backpointers[i][states[0][0]], t[i][backpointers[i][states[0][0]]]))
+        #states.appendleft((t[i].argmax(), t[i].max()))
+    return states
+
+
 def online_viterbi(n_states, mat, gmms_, transitions):
+    # TODO finish and correct
     # transform to from e.g. (sigma2_invs) 39*39*17 to 17*39*39
     g = map(lambda (pis, mus, sigma2_invs): (pis, mus.T, sigma2_invs.T), gmms_) 
     t = np.ndarray((mat.shape[0], n_states))
     t[:] = -100000.0 # log
     t[0] = map(math.log, map(functools.partial(eval_gauss_mixt, mat[0]), g)) # log
+    # t[0][STARTING_STATE(i.e. first !ENTER state)] = eval_gauss_mixt(mat[0], g[THIS STATE]) # TODO we should start with !ENTER
     backpointers = np.ndarray((mat.shape[0]-1, n_states), dtype=int)
     backpointers[:] = -1
     nonnulls = [jj for jj, val in enumerate(t[0]) if val > -100000.0] # log
@@ -307,14 +332,16 @@ def process(ofname, iscpfname, ihmmfname, ilmfname):
         print cline
         posteriors = compute_likelihoods(n_states,
                 htkmfc.open(cline).getall(), gmms_)
-        #viterbi(posteriors, transitions)
+        s = '"' + cline[:-3] + 'lab"\n' + \
+                string_mlf(map_states_to_phones,
+                        viterbi(posteriors, transitions, map_states_to_phones)) + '.\n'
         #s = '"' + cline[:-3] + 'lab"\n' + \
         #        string_mlf(map_states_to_phones,
-        #                cline[:-3] + 'lab',
+        #                # cline[:-3] + 'lab',
         #                online_viterbi(n_states, htkmfc.open(cline).getall(), 
         #                gmms_, transitions)) + \
         #        '.\n'
-        #list_mlf_string.append(s)
+        list_mlf_string.append(s)
         if line_number > 0: # TODO remove
             break
     iscpf.close()
