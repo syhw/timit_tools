@@ -39,7 +39,11 @@ For all file.wav wav files in the dataset, what this script does is eqvlt to:
 """
 
 def process(folder, 
-        debug=False, htk_mfc=False, stereo_wav=False, gammatones=False):
+        debug=False, 
+        htk_mfc=False, 
+        forcemfcext=False,
+        stereo_wav=False, 
+        gammatones=False):
     """ debug output? HCopy for MFCC? wav are stereo? produce gammatones? """
 
     # first find if we produce normalized MFCC, otherwise note it in the ext
@@ -49,6 +53,8 @@ def process(folder,
     for line in wcfg:
         if "ENORMALISE" in line:
             mfc_extension = '.mfc'
+    if forcemfcext:
+        mfc_extension = '.mfc'
     print "MFC extension:", mfc_extension
 
     # run through all the folders and files in the path "folder"
@@ -98,11 +104,14 @@ if __name__ == '__main__':
             print doc
             sys.exit(0)
         debug = False
+        forcemfcext = False
         htk_mfcc = False
         stereo = False
         gammatones = False
         if '--debug' in sys.argv:
             debug = True
+        if '--forcemfcext' in sys.argv:
+            forcemfcext = True
         if '--htk_mfcc' in sys.argv:
             htk_mfcc = True
         if '--stereo' in sys.argv:
@@ -118,6 +127,6 @@ if __name__ == '__main__':
         foldername = '.'
         if len(l) > 1:
             foldername = l[1]
-        process(foldername, debug, htk_mfcc, stereo, gammatones)
+        process(foldername, debug, htk_mfcc, forcemfcext, stereo, gammatones)
     else:
         process('.') # default

@@ -1,4 +1,4 @@
-import os, sys
+import os, sys, cPickle
 
 """
 License: WTFPL http://www.wtfpl.net
@@ -44,7 +44,10 @@ foldings = {'ux': 'uw',
 
 
 
-def process(folder, sentences=False, substitute=True):
+def process(folder, 
+        sentences=False, # should we apply !ENTER/!EXIT for start/end?
+        substitute=True, # should we substitute phones with foldings dict?
+        startend_sil=False): # should we substitute start and end w/ sil
     if not substitute:
         foldings = {}
     c_before = {}
@@ -59,29 +62,30 @@ def process(folder, sentences=False, substitute=True):
             os.rename(fullname, fullname+'~')
             fr = open(fullname+'~', 'r')
             fw = open(fullname, 'w')
-            saw_pause = 0
+            text_buffer = []
             for line in fr:
-                phones_before.append(line.split()[2])
+                phones_before.append(line.split()[-1]) # phone last elt of line
                 tmpline = line
-                if sentences:
-                    if not saw_pause:
-                        tmpline = tmpline.replace('h#', '!ENTER') # TODO check with other corpus
-                        #tmpline = tmpline.replace('sil', '!ENTER')
-                    else:
-                        tmpline = tmpline.replace('h#', '!EXIT')
-                        #tmpline = tmpline.replace('sil', '!EXIT')
                 tmpline = tmpline.replace('-', '')
                 tmp = tmpline.split()
                 for k, v in foldings.iteritems():
-                    if tmp[2] == k:
-                        tmp[2] = v
-                        tmpline = ' '.join(tmp) + '\n'
-                fw.write(tmpline)
-                phones_after.append(tmpline.split()[2])
-                if 'h#' in line or 'sil' in line:
-                    saw_pause += 1
-            if saw_pause > 2:
-                print "this file has more than 2 pauses", fname
+                    if tmp[-1] == k:
+                        tmp[-1] = v
+                        tmpline = ' '.join(tmp)
+                text_buffer.append(tmpline.split())
+            first_phone = text_buffer[0][-1]
+            last_phone = text_buffer[-1][-1]
+            if sentences:
+                if first_phone == 'h#' or first_phone == 'sil':
+                    text_buffer[0] = text_buffer[0][:-1] + ['!ENTER']
+                if last_phone == 'h#' or last_phone == 'sil':
+                    text_buffer[-1] = text_buffer[-1][:-1] + ['!EXIT']
+            if startend_sil:
+                text_buffer[0] = text_buffer[0][:-1] + ['sil']
+                text_buffer[-1] = text_buffer[-1][:-1] + ['sil']
+            for buffer_line in text_buffer:
+                phones_after.append(buffer_line[-1])
+                fw.write(' '.join(buffer_line) + '\n')
             fw.close()
             os.remove(fullname+'~')
             for tmp_phn in phones_before:
@@ -91,6 +95,8 @@ def process(folder, sentences=False, substitute=True):
             print "dealt with", fullname 
     print "Counts before substitution", c_before
     print "Counts after substitution", c_after
+    with open(folder.rstrip('/') + '/unigrams.pickle', 'w') as unidump:
+        cPickle.dump(c_after, unidump)
 
 
 if __name__ == '__main__':
@@ -100,14 +106,17 @@ if __name__ == '__main__':
             sys.exit(0)
         sentences = False
         substitute = True
+        startend_sil = False
         if '--sentences' in sys.argv:
             sentences = True
+        if '--startendsil' in sys.argv:
+            startend_sil = True
         if '--nosubst' in sys.argv:
             substitute = False
         l = filter(lambda x: not '--' in x[0:2], sys.argv)
         foldername = '.'
         if len(l) > 1:
             foldername = l[1]
-        process(foldername, sentences, substitute)
+        process(foldername, sentences, substitute, startend_sil)
     else:
         process('.') # default

@@ -10,8 +10,8 @@ help:
 prepare: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo "*** preparing the dataset for phones recognition ***"
 	@echo "\n>>> produce MFCC from WAV files\n"
-	python src/mfcc_and_gammatones.py --htk-mfcc $(dataset)/train
-	python src/mfcc_and_gammatones.py --htk-mfcc $(dataset)/test
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
 	@echo "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
 	python src/timit_to_htk_labels.py $(dataset)/train
 	python src/timit_to_htk_labels.py $(dataset)/test
@@ -227,6 +227,15 @@ align:
 	@echo ">>> Using: $(input_scp) and $(input_mlf), going to $(output_mlf)"
 	HVite -l $(TMP_TRAIN_FOLDER) -a -m -y lab -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -I $(input_mlf) -S $(input_scp) $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones 
 	# -f if you want the full states alignment, -o C for likelihoods by phone, see p.326 in the HTK book
+
+train_test_monophones:
+	make train_monophones dataset_train_folder=$(dataset)/train
+	make test_monophones dataset_test_folder=$(dataset)/test
+
+all:
+	make prepare $(dataset)
+	make train_monophones dataset_train_folder=$(dataset)/train
+	make test_monophones dataset_test_folder=$(dataset)/test
 
 
 clean:
