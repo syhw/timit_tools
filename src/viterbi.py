@@ -11,7 +11,6 @@ usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM PHONES_COUNTS [INPUT_LM] [options: --help]
 """
 
-USING_BIGRAM = False
 THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
 epsilon = 1E-10 # degree of precision for floating (0.0-1.0 probas) operations
 
@@ -77,13 +76,13 @@ def freq_from_counts(picklef, map_states_to_phones):
     tmp = []
     for i in xrange(len(map_states_to_phones)):
         tmp.append(t[map_states_to_phones[i].split('[')[0]])
-    return np.log(np.array(tmp))
+    return np.log(np.array(tmp, dtype="float64"))
 
 
 def compute_likelihoods(mat, gmms_):
     """ compute the log-likelihoods of each states i according to the Gaussian 
     mixture in gmms_[i], for each line of mat (input data) """
-    ret = np.ndarray((mat.shape[0], len(gmms_)))
+    ret = np.ndarray((mat.shape[0], len(gmms_)), dtype="float64")
     ret[:] = 0.0
     for state_id, mixture in enumerate(gmms_):
         pis, mus, inv_sigmas = mixture
@@ -150,12 +149,12 @@ def string_mlf(map_states_to_phones, states, phones_only=False):
     return '\n'.join(s)
 
 
-def viterbi(posteriors, transitions, map_states_to_phones):
+def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False):
     """ This function applies Viterbi on the posteriors already computed """
     starting_state = None
     ending_state = None
     for state, phone in map_states_to_phones.iteritems():
-        if USING_BIGRAM:
+        if using_bigram:
             if phone == '!ENTER[2]' or phone == 'h#[2]': # hardcoded TODO remove
                 starting_state = state
             if phone == '!EXIT[4]' or phone == 'h#[4]': # hardcoded TODO remove
@@ -166,31 +165,62 @@ def viterbi(posteriors, transitions, map_states_to_phones):
     backpointers = np.ndarray((posteriors.shape[0]-1, posteriors.shape[1]), 
             dtype=int)
     backpointers[:] = -1
-    if USING_BIGRAM:
+    if using_bigram:
         nonnulls = [starting_state]
     else:
         nonnulls = [jj for jj, val in enumerate(t[0]) if val > -1000000.0] 
     log_transitions = np.log(transitions[1] + epsilon) # log
-    # Main viterbi loop
-    for i in xrange(1, posteriors.shape[0]):
-        for j in xrange(posteriors.shape[1]):
-            max_ = -1000000.0 # log
-            max_ind = -2
-            for k in nonnulls:
-                #if transitions[1][k][j] == 0.0:
-                if log_transitions[k][j] < max_:
-                    continue
-                tmp_prob = (posteriors[i-1][k] + log_transitions[k][j] # log
-                        + posteriors[i][j]) # log
-                if tmp_prob > max_:
-                    max_ = tmp_prob
-                    max_ind = k
-            t[i][j] = max_ # log
-            backpointers[i-1][j] = max_ind
-        nonnulls = [jj for jj, val in enumerate(t[i]) if val > -1000000.0] # log
-        if len(nonnulls) == 0:
-            print >> sys.stderr, ">>>>>>>>> NONNULLS IS EMPTY", i, posteriors.shape[0]
-    if USING_BIGRAM:
+    # Main viterbi loop, try with native code if possible
+    try:
+        from scipy import weave
+        from scipy.weave import converters
+        px = posteriors.shape[0]
+        py = posteriors.shape[1]
+        code_c = """
+                #line 180 "viterbi.py" (FOR DEBUG)
+                for (int i=1; i < px; ++i) { 
+                    for (int j=0; j < py; ++j) {
+                        float max_ = -1000000.0;
+                        int max_ind = -2;
+                        for (int k=0; k < py; ++k) {
+                            if (log_transitions(k,j) < max_)
+                                continue;
+                            float tmp_prob = posteriors(i-1,k) + log_transitions(k,j) + posteriors(i,j);
+                            if (tmp_prob > max_) {
+                                max_ = tmp_prob;
+                                max_ind = k;
+                            }
+                        }
+                        t(i,j) = max_;
+                        backpointers(i-1,j) = max_ind;
+                    }
+                }
+                """
+        err = weave.inline(code_c,
+                ['px', 'py', 'log_transitions', 'posteriors', 't', 'backpointers'],
+                type_converters=converters.blitz,
+                compiler = 'gcc')
+    except:
+        for i in xrange(1, posteriors.shape[0]):
+            for j in xrange(posteriors.shape[1]):
+                max_ = -1000000.0 # log
+                max_ind = -2
+                for k in nonnulls:
+                    #if transitions[1][k][j] == 0.0:
+                    if log_transitions[k][j] < max_:
+                        continue
+                    tmp_prob = (posteriors[i-1][k] + log_transitions[k][j] # log
+                            + posteriors[i][j]) # log
+                    if tmp_prob > max_:
+                        max_ = tmp_prob
+                        max_ind = k
+                t[i][j] = max_ # log
+                backpointers[i-1][j] = max_ind
+            nonnulls = [jj for jj, val in enumerate(t[i]) if val > -1000000.0] # log
+            if len(nonnulls) == 0:
+                print >> sys.stderr, ">>>>>>>>> NONNULLS IS EMPTY", i, posteriors.shape[0]
+
+    if using_bigram:
         states = deque([(ending_state, t[posteriors.shape[0]-1][ending_state])])
     else:
         states = deque([(t[posteriors.shape[0]-1].argmax(), t[posteriors.shape[0]-1].max())])
@@ -406,7 +436,8 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
             s = '"' + cline[:-3] + 'lab"\n' + \
                     string_mlf(map_states_to_phones,
                             viterbi(posteriors, transitions, 
-                                map_states_to_phones),
+                                map_states_to_phones,
+                                ilmfname != None),
                             phones_only=True) + '.\n'
             #s = '"' + cline[:-3] + 'lab"\n' + \
             #        string_mlf(map_states_to_phones,
@@ -415,8 +446,8 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
             #                gmms_, transitions)) + \
             #        '.\n'
             list_mlf_string.append(s)
-            if line_number > 0: # TODO remove
-                break
+            #if line_number >= 1: # TODO remove
+            #    break
     with open(ofname, 'w') as of:
         of.write('#!MLF!#\n')
         for line in list_mlf_string:
@@ -437,7 +468,6 @@ if __name__ == "__main__":
         input_lm_fname = None
         if len(l) > 5:
             input_lm_fname = l[5]
-            USING_BIGRAM = True
         process(output_fname, input_scp_fname, 
                 input_hmm_fname, input_counts_fname, input_lm_fname)
     else:
