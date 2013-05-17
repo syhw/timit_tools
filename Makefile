@@ -15,7 +15,7 @@ prepare: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
 	python src/timit_to_htk_labels.py $(dataset)/train
 	python src/timit_to_htk_labels.py $(dataset)/test
-	@echo "\n>>> subtitles phones (61 down to 39)\n"
+	@echo "\n>>> subtitles phones (61 down to 39 if not --nosubst) \n"
 	python src/substitute_phones.py $(dataset)/train --sentences --nosubst
 	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
@@ -186,13 +186,15 @@ bigram_LM:
 
 test_monophones:
 	@echo "*** testing the monophone trained model ***"
-	HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HVite -p 0.0 -s 5.0 -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	#HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
 	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
 test_monophones_bigram_LM:
 	@echo "*** testing the monophone trained model (with a bigram LM) ***"
-	HVite -w $(TMP_TRAIN_FOLDER)/wdnetbigram -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HVite -p 2.5 -s 5.0 -w $(TMP_TRAIN_FOLDER)/wdnetbigram -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	#HVite -w $(TMP_TRAIN_FOLDER)/wdnetbigram -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
 	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
@@ -235,7 +237,10 @@ train_test_monophones:
 all:
 	make prepare $(dataset)
 	make train_monophones dataset_train_folder=$(dataset)/train
-	make test_monophones dataset_test_folder=$(dataset)/test
+	make bigram_LM
+	make test_monophones_bigram_LM dataset_test_folder=$(dataset)/test
+
+
 
 
 clean:

@@ -8,9 +8,15 @@ import htkmfc
 import itertools
 
 usage = """
-python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM PHONES_COUNTS [INPUT_LM] [options: --help]
+python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [--uPHONES_COUNTS] 
+                                                   [--bINPUT_LM] 
+    --u directly followed (without space) by a unigram count dict pickle
+    --b directly followed (without space) by an HTK bigram file (ARPA-MIT LL)
+        /!\ A bigram LM will only work if there are sentences start/end
+            (the default symbols are !ENTER/!EXIT)
 """
 
+VERBOSE = False
 THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
 epsilon = 1E-10 # degree of precision for floating (0.0-1.0 probas) operations
 
@@ -32,12 +38,11 @@ def clean(s):
 
 
 def eval_gauss_mixt(v, gmixt):
-    """ UNTESTED """ # TODO re-test since change
     assert(len(gmixt[0]) == gmixt[1].shape[0] == gmixt[2].shape[0])
     def eval_gauss_comp(mix_comp): # closure
-        pi_k, mu_k, sigma2_k_inv = mix_comp
+        pi_k, mu_k, sigma_k_inv = mix_comp
         return pi_k * math.exp(-0.5 * np.dot((v - mu_k).T, 
-                    np.dot(sigma2_k_inv, v - mu_k)))
+                    np.dot(sigma_k_inv, v - mu_k)))
     return reduce(lambda x, y: x + y, map(eval_gauss_comp, 
         itertools.izip(gmixt[0], gmixt[1], gmixt[2])))
 
@@ -49,19 +54,18 @@ def precompute_det_inv(gmms):
         for gm_st in gm:
             pi_k = []
             mu_k = []
-            inv_sqrt_det_sigma2 = []
-            inv_sigma2 = []
+            inv_sqrt_det_sigma = []
+            inv_sigma = []
             for component in gm_st:
                 pi_k.append(component[0])
                 mu_k.append(component[1])
                 sigma2_k = component[2]
-                inv_sqrt_det_sigma2.append(1.0 / np.sqrt(linalg.det(2 * np.pi * np.diag(sigma2_k))))
-                inv_sigma2.append(1.0 / np.array(sigma2_k))
-                assert((inv_sigma2[-1] == np.diag(linalg.inv(np.diag(sigma2_k)))).all())
-                #inv_sigma2.append(linalg.inv(np.diag(sigma2_k)))
-            ret.append((np.array(pi_k) * np.array(inv_sqrt_det_sigma2), 
+                inv_sqrt_det_sigma.append(1.0 / np.sqrt(linalg.det(2 * np.pi * np.diag(sigma2_k))))
+                inv_sigma.append(1.0 / np.array(sigma2_k))
+                assert((inv_sigma[-1] == np.diag(linalg.inv(np.diag(sigma2_k)))).all())
+            ret.append((np.array(pi_k) * np.array(inv_sqrt_det_sigma), 
                     np.array(mu_k).T, 
-                    np.array(inv_sigma2).T))
+                    np.array(inv_sigma).T))
     return ret
 
 
@@ -183,21 +187,24 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False):
                         float max_ = -1000000.0;
                         int max_ind = -2;
                         for (int k=0; k < py; ++k) {
-                            if (log_transitions(k,j) < max_)
+                            if (posteriors(i-1,k) < max_ || log_transitions(k,j) < max_)
                                 continue;
-                            float tmp_prob = posteriors(i-1,k) + log_transitions(k,j) + posteriors(i,j);
+                            float tmp_prob = posteriors(i-1,k) + log_transitions(k,j);
+//                            if (((k+1) % 3) == 0 && k != j && k!= j-1 && k!= j-2)
+//                                tmp_prob -= 4.0;
                             if (tmp_prob > max_) {
                                 max_ = tmp_prob;
                                 max_ind = k;
                             }
                         }
-                        t(i,j) = max_;
+                        t(i,j) = max_ + posteriors(i,j);
                         backpointers(i-1,j) = max_ind;
                     }
                 }
                 """
         err = weave.inline(code_c,
-                ['px', 'py', 'log_transitions', 'posteriors', 't', 'backpointers'],
+                ['px', 'py', 'log_transitions', 
+                    'posteriors', 't', 'backpointers'],
                 type_converters=converters.blitz,
                 compiler = 'gcc')
     except:
@@ -209,12 +216,11 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False):
                     #if transitions[1][k][j] == 0.0:
                     if log_transitions[k][j] < max_:
                         continue
-                    tmp_prob = (posteriors[i-1][k] + log_transitions[k][j] # log
-                            + posteriors[i][j]) # log
+                    tmp_prob = posteriors[i-1][k] + log_transitions[k][j] # log
                     if tmp_prob > max_:
                         max_ = tmp_prob
                         max_ind = k
-                t[i][j] = max_ # log
+                t[i][j] = max_ + posteriors[i][j] # log
                 backpointers[i-1][j] = max_ind
             nonnulls = [jj for jj, val in enumerate(t[i]) if val > -1000000.0] # log
             if len(nonnulls) == 0:
@@ -234,9 +240,8 @@ def online_viterbi(mat, gmms_, transitions):
     """ This function applied Viterbi and computes the likelihoods from gmms_
     with the features values in mat only when needed (exploiting transitions 
     sparsity). Slow because full Python """
-    # TODO finish and correct
     # transform to from e.g. (sigma2_invs) 39*39*17 to 17*39*39
-    g = map(lambda (pis, mus, sigma2_invs): (pis, mus.T, sigma2_invs.T), gmms_) 
+    g = map(lambda (pis, mus, sigma_invs): (pis, mus.T, sigma_invs.T), gmms_) 
     t = np.ndarray((mat.shape[0], len(gmms_)))
     t[:] = -1000000.0 # log
     t[0] = map(math.log, map(functools.partial(eval_gauss_mixt, mat[0]), g)) # log
@@ -344,6 +349,7 @@ def parse_hmm(f):
     n_phones = 0
     n_states_tot = 0
     for line in l:
+        # GCONST = ln((2*pi)^n det(sigma)) == ln(det(2*pi*sigma))
         if '~h' in line:
             n_phones += 1
         elif '<NUMSTATES>' in line:
@@ -423,23 +429,28 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
     gmms_ = precompute_det_inv(gmms)
     #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
     map_states_to_phones = phones_mapping(gmms)
-    with open(iphncountfname) as iphnctf:
-        phones_frequencies = freq_from_counts(iphnctf, map_states_to_phones)
+
+    phones_frequencies = 0 
+    if iphncountfname != None:
+        with open(iphncountfname) as iphnctf:
+            phones_frequencies = freq_from_counts(iphnctf, map_states_to_phones)
+
     list_mlf_string = []
     with open(iscpfname) as iscpf:
         for line_number, line in enumerate(iscpf): # TODO parallelize (pool.map for instance)
             cline = clean(line)
-            print cline
+            if VERBOSE:
+                print cline
             posteriors = compute_likelihoods(htkmfc.open(cline).getall(), 
                     gmms_) # len(gmms_) == n_states
             posteriors += phones_frequencies # TODO check
-            s = '"' + cline[:-3] + 'lab"\n' + \
+            s = '"' + cline[:-3] + 'rec"\n' + \
                     string_mlf(map_states_to_phones,
                             viterbi(posteriors, transitions, 
                                 map_states_to_phones,
                                 ilmfname != None),
                             phones_only=True) + '.\n'
-            #s = '"' + cline[:-3] + 'lab"\n' + \
+            #s = '"' + cline[:-3] + 'rec"\n' + \
             #        string_mlf(map_states_to_phones,
             #                # cline[:-3] + 'lab',
             #                online_viterbi(n_states, htkmfc.open(cline).getall(), 
@@ -461,13 +472,21 @@ if __name__ == "__main__":
             sys.exit(0)
         #if '--debug' in sys.argv:
         l = filter(lambda x: not '--' in x[0:2], sys.argv)
+        options = filter(lambda x: '--' in x[0:2], sys.argv)
         output_fname = l[1]
         input_scp_fname = l[2]
         input_hmm_fname = l[3]
-        input_counts_fname = l[4]
+        input_counts_fname = None
         input_lm_fname = None
-        if len(l) > 5:
-            input_lm_fname = l[5]
+        if len(options): # we have unigram counts or a bigram LM
+            for option in options:
+                if option == '--verbose':
+                    global VERBOSE
+                    VERBOSE = True
+                if option[2] == 'u':
+                    input_counts_fname = option[3:]
+                elif option[2] == 'b':
+                    input_lm_fname = option[3:]
         process(output_fname, input_scp_fname, 
                 input_hmm_fname, input_counts_fname, input_lm_fname)
     else:
