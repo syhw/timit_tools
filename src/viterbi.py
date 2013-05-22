@@ -202,8 +202,8 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
                             if (posteriors(i-1,k) < max_ || log_transitions(k,j) < max_)
                                 continue;
                             float tmp_prob = posteriors(i-1,k) + log_transitions(k,j);
-//                            if (((k+1) % 3) == 0 && k != j && k!= j-1 && k!= j-2)
-//                                tmp_prob -= 4.0;
+                            if (((k+1) % 3) == 0 && k != j && k!= j-1 && k!= j-2) // HACK TODO check/remove
+                                tmp_prob -= insertion_penalty;
                             if (tmp_prob > max_) {
                                 max_ = tmp_prob;
                                 max_ind = k;
@@ -215,7 +215,7 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
                 }
                 """
         err = weave.inline(code_c,
-                ['px', 'py', 'log_transitions',
+                ['px', 'py', 'log_transitions', 'insertion_penalty',
                     'posteriors', 't', 'backpointers'],
                 type_converters=converters.blitz,
                 compiler = 'gcc')
@@ -229,6 +229,8 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
                     if log_transitions[k][j] < max_:
                         continue
                     tmp_prob = posteriors[i-1][k] + log_transitions[k][j] # log
+                    if ((k+1) % 3) == 0 and not (j-2 <= k <= j): # HACK TODO check/remove
+                        tmp_prob -= insertion_penalty
                     if tmp_prob > max_:
                         max_ = tmp_prob
                         max_ind = k
