@@ -69,7 +69,7 @@ def precompute_det_inv(gmms):
     return ret
 
 
-def freq_from_counts(picklef, map_states_to_phones):
+def states_freq_from_counts(picklef, map_states_to_phones):
     """ from a pickled dict[phn]=count created by src/substitute_phones.py,
     computes the phones log-frequency and create the state aligned numpy array 
     """
@@ -81,6 +81,17 @@ def freq_from_counts(picklef, map_states_to_phones):
     for i in xrange(len(map_states_to_phones)):
         tmp.append(t[map_states_to_phones[i].split('[')[0]])
     return np.log(np.array(tmp, dtype="float64"))
+
+
+def phones_freq_from_counts(picklef):
+    """ from a pickled dict[phn]=count created by src/substitute_phones.py,
+    computes the phones log-frequency and create the state aligned numpy array 
+    """
+    t = cPickle.load(picklef)
+    tot = sum(t.itervalues())
+    for phn, count in t.iteritems():
+        t[phn] = count * 1.0 / tot
+    return t
 
 
 def compute_likelihoods(mat, gmms_):
@@ -153,7 +164,8 @@ def string_mlf(map_states_to_phones, states, phones_only=False):
     return '\n'.join(s)
 
 
-def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False):
+def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
+        scale_factor=1.0, insertion_penalty=0.0): # TODO insertion_penalty
     """ This function applies Viterbi on the posteriors already computed """
     starting_state = None
     ending_state = None
@@ -173,7 +185,7 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False):
         nonnulls = [starting_state]
     else:
         nonnulls = [jj for jj, val in enumerate(t[0]) if val > -1000000.0] 
-    log_transitions = np.log(transitions[1] + epsilon) # log
+    log_transitions = np.log(scale_factor * transitions[1] + epsilon) # log
     # Main viterbi loop, try with native code if possible
     try:
         from scipy import weave
@@ -203,7 +215,7 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False):
                 }
                 """
         err = weave.inline(code_c,
-                ['px', 'py', 'log_transitions', 
+                ['px', 'py', 'log_transitions',
                     'posteriors', 't', 'backpointers'],
                 type_converters=converters.blitz,
                 compiler = 'gcc')
@@ -274,14 +286,19 @@ def online_viterbi(mat, gmms_, transitions):
     #return t, backpointers
 
 
-def initialize_transitions(trans):
-    """ takes the transition matrix only inter HMMs and give uniform 
+def initialize_transitions(trans, phones_frequencies=None):
+    """ takes the transition matrix only inter HMMs and give uniform or unigram
     probabilities of transitions between of each last state and first state """
     for phn1, phone1 in trans[0].iteritems():
         already_in_prob = trans[1][phone1.to_ind[-1]][phone1.to_ind[-1]]
-        to_distribute = (1.0 - already_in_prob) / len(trans[0])
+        to_distribute = (1.0 - already_in_prob) 
+        value = to_distribute / (len(trans[0])) # - 1)
         for phn2, phone2 in trans[0].iteritems():
-            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = to_distribute
+            #if phn2 != phn1:
+            if phones_frequencies != None:
+                value = to_distribute * phones_frequencies[phn2]
+            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = value
+        assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
     return trans
 
 
@@ -418,22 +435,21 @@ def parse_hmm(f):
 def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
     with open(ihmmfname) as ihmmf:
         n_states, transitions, gmms = parse_hmm(ihmmf)
-    if ilmfname != None:
-        with open(input_lm_fname) as ilmf:
-            transitions = parse_lm(transitions, ilmf) # parse bigram LM in ilmf
-    else:
-        # uniform transitions btwn phones
-        print "initialize the transitions between phones uniformly"
-        transitions = initialize_transitions(transitions) 
-    
+
     gmms_ = precompute_det_inv(gmms)
     #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
     map_states_to_phones = phones_mapping(gmms)
 
-    phones_frequencies = 0 
-    if iphncountfname != None:
-        with open(iphncountfname) as iphnctf:
-            phones_frequencies = freq_from_counts(iphnctf, map_states_to_phones)
+    if ilmfname != None:
+        with open(input_lm_fname) as ilmf:
+            transitions = parse_lm(transitions, ilmf) # parse bigram LM in ilmf
+    else:
+        phones_frequencies = None
+        if iphncountfname != None:
+            with open(iphncountfname) as iphnctf:
+                phones_frequencies = phones_freq_from_counts(iphnctf)
+        # uniform transitions btwn phones
+        transitions = initialize_transitions(transitions, phones_frequencies)
 
     list_mlf_string = []
     with open(iscpfname) as iscpf:
@@ -443,12 +459,14 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
                 print cline
             posteriors = compute_likelihoods(htkmfc.open(cline).getall(), 
                     gmms_) # len(gmms_) == n_states
-            posteriors += phones_frequencies # TODO check
             s = '"' + cline[:-3] + 'rec"\n' + \
                     string_mlf(map_states_to_phones,
                             viterbi(posteriors, transitions, 
                                 map_states_to_phones,
-                                ilmfname != None),
+                                using_bigram=(ilmfname != None),
+                                #using_bigram=True,
+                                scale_factor=1.0, # 5.0
+                                insertion_penalty=0.0), # 2.5
                             phones_only=True) + '.\n'
             #s = '"' + cline[:-3] + 'rec"\n' + \
             #        string_mlf(map_states_to_phones,
@@ -481,12 +499,15 @@ if __name__ == "__main__":
         if len(options): # we have unigram counts or a bigram LM
             for option in options:
                 if option == '--verbose':
-                    global VERBOSE
                     VERBOSE = True
                 if option[2] == 'u':
                     input_counts_fname = option[3:]
+                    print "initialize the transitions between phones with the unigram lm", input_counts_fname
                 elif option[2] == 'b':
                     input_lm_fname = option[3:]
+                    print "initialize the transitions between phones with the bigram lm", input_lm_fname
+                else:
+                    print "initialize the transitions between phones uniformly"
         process(output_fname, input_scp_fname, 
                 input_hmm_fname, input_counts_fname, input_lm_fname)
     else:
