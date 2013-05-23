@@ -186,7 +186,7 @@ bigram_LM:
 
 test_monophones:
 	@echo "*** testing the monophone trained model ***"
-	HVite -p 0.0 -s 5.0 -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	HVite -p 0.0 -s 10.0 -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
 	#HVite -w $(TMP_TRAIN_FOLDER)/wdnet -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
 	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 

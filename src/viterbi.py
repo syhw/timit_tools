@@ -165,7 +165,7 @@ def string_mlf(map_states_to_phones, states, phones_only=False):
 
 
 def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
-        scale_factor=1.0, insertion_penalty=0.0): # TODO insertion_penalty
+        insertion_penalty=0.0): # TODO insertion_penalty
     """ This function applies Viterbi on the posteriors already computed """
     starting_state = None
     ending_state = None
@@ -185,7 +185,7 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
         nonnulls = [starting_state]
     else:
         nonnulls = [jj for jj, val in enumerate(t[0]) if val > -1000000.0] 
-    log_transitions = np.log(scale_factor * transitions[1] + epsilon) # log
+    log_transitions = np.log(transitions[1] + epsilon) # log
     # Main viterbi loop, try with native code if possible
     try:
         from scipy import weave
@@ -201,7 +201,7 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
                         for (int k=0; k < py; ++k) {
                             if (posteriors(i-1,k) < max_ || log_transitions(k,j) < max_)
                                 continue;
-                            float tmp_prob = posteriors(i-1,k) + log_transitions(k,j);
+                            float tmp_prob = t(i-1,k) + log_transitions(k,j);
                             if (((k+1) % 3) == 0 && k != j && k!= j-1 && k!= j-2) // HACK TODO check/remove
                                 tmp_prob -= insertion_penalty;
                             if (tmp_prob > max_) {
@@ -228,7 +228,7 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
                     #if transitions[1][k][j] == 0.0:
                     if log_transitions[k][j] < max_:
                         continue
-                    tmp_prob = posteriors[i-1][k] + log_transitions[k][j] # log
+                    tmp_prob = t[i-1][k] + log_transitions[k][j] # log
                     if ((k+1) % 3) == 0 and not (j-2 <= k <= j): # HACK TODO check/remove
                         tmp_prob -= insertion_penalty
                     if tmp_prob > max_:
@@ -288,7 +288,7 @@ def online_viterbi(mat, gmms_, transitions):
     #return t, backpointers
 
 
-def initialize_transitions(trans, phones_frequencies=None):
+def initialize_transitions(trans, phones_frequencies=None, scale_factor=1.0):
     """ takes the transition matrix only inter HMMs and give uniform or unigram
     probabilities of transitions between of each last state and first state """
     for phn1, phone1 in trans[0].iteritems():
@@ -304,8 +304,9 @@ def initialize_transitions(trans, phones_frequencies=None):
     return trans
 
 
-def parse_lm(trans, f):
+def parse_lm(trans, f, scale_factor=1.0):
     """ parse ARPA MIT-LL backed-off bigrams in f """
+    # TODO SCALE FACTOR
     p_1grams = {}
     b_1grams = {}
     p_2grams = defaultdict(lambda: {}) # p_2grams[A][B] = unnormalized P(A|B)
@@ -435,6 +436,7 @@ def parse_hmm(f):
 
 
 def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
+    SCALE_FACTOR = 5.0
     with open(ihmmfname) as ihmmf:
         n_states, transitions, gmms = parse_hmm(ihmmf)
 
@@ -444,14 +446,15 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
 
     if ilmfname != None:
         with open(input_lm_fname) as ilmf:
-            transitions = parse_lm(transitions, ilmf) # parse bigram LM in ilmf
+            transitions = parse_lm(transitions, ilmf, scale_factor=SCALE_FACTOR) # parse bigram LM in ilmf
     else:
         phones_frequencies = None
         if iphncountfname != None:
             with open(iphncountfname) as iphnctf:
                 phones_frequencies = phones_freq_from_counts(iphnctf)
         # uniform transitions btwn phones
-        transitions = initialize_transitions(transitions, phones_frequencies)
+        transitions = initialize_transitions(transitions, phones_frequencies,
+                scale_factor=SCALE_FACTOR)
 
     list_mlf_string = []
     with open(iscpfname) as iscpf:
@@ -467,7 +470,6 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
                                 map_states_to_phones,
                                 using_bigram=(ilmfname != None),
                                 #using_bigram=True,
-                                scale_factor=1.0, # 5.0
                                 insertion_penalty=0.0), # 2.5
                             phones_only=True) + '.\n'
             #s = '"' + cline[:-3] + 'rec"\n' + \
