@@ -6,18 +6,22 @@ import cPickle
 from collections import defaultdict, deque
 import htkmfc
 import itertools
+from multiprocessing import Pool
 
 usage = """
-python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [--uPHONES_COUNTS] 
-                                                   [--bINPUT_LM] 
-    --u directly followed (without space) by a unigram count dict pickle
-    --b directly followed (without space) by an HTK bigram file (ARPA-MIT LL)
+python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [--u PHONES_COUNTS] 
+        [--p INSERTION_PENALTY] [--s SCALE_FACTOR] [--b INPUT_LM] 
+
+    --u followed (without space) by a unigram count dict pickle
+    --b followed (without space) by an HTK bigram file (ARPA-MIT LL)
         /!\ A bigram LM will only work if there are sentences start/end
             (the default symbols are !ENTER/!EXIT)
 """
 
 VERBOSE = False
 THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
+SCALE_FACTOR = 5.0 # importance of the phones->phone trans w.r.t state->state
+INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
 epsilon = 1E-10 # degree of precision for floating (0.0-1.0 probas) operations
 
 class Phone:
@@ -164,9 +168,9 @@ def string_mlf(map_states_to_phones, states, phones_only=False):
     return '\n'.join(s)
 
 
-def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
+def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False,
         insertion_penalty=0.0): # TODO insertion_penalty
-    """ This function applies Viterbi on the posteriors already computed """
+    """ This function applies Viterbi on the likelihoods already computed """
     starting_state = None
     ending_state = None
     for state, phone in map_states_to_phones.iteritems():
@@ -175,23 +179,23 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
                 starting_state = state
             if phone == '!EXIT[4]' or phone == 'h#[4]': # hardcoded TODO remove
                 ending_state = state
-    t = np.ndarray((posteriors.shape[0], posteriors.shape[1]))
-    t[:] = -1000000.0 # log
-    t[0] = posteriors[0] # log
-    backpointers = np.ndarray((posteriors.shape[0]-1, posteriors.shape[1]), 
+    posteriors = np.ndarray((likelihoods.shape[0], likelihoods.shape[1]))
+    posteriors[:] = -1000000.0 # log
+    posteriors[0] = likelihoods[0] # log
+    backpointers = np.ndarray((likelihoods.shape[0]-1, likelihoods.shape[1]), 
             dtype=int)
     backpointers[:] = -1
     if using_bigram:
         nonnulls = [starting_state]
     else:
-        nonnulls = [jj for jj, val in enumerate(t[0]) if val > -1000000.0] 
+        nonnulls = [jj for jj, val in enumerate(posteriors[0]) if val > -1000000.0] 
     log_transitions = np.log(transitions[1] + epsilon) # log
     # Main viterbi loop, try with native code if possible
     try:
         from scipy import weave
         from scipy.weave import converters
-        px = posteriors.shape[0]
-        py = posteriors.shape[1]
+        px = likelihoods.shape[0]
+        py = likelihoods.shape[1]
         code_c = """
                 #line 180 "viterbi.py" (FOR DEBUG)
                 for (int i=1; i < px; ++i) { 
@@ -199,9 +203,9 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
                         float max_ = -1000000.0;
                         int max_ind = -2;
                         for (int k=0; k < py; ++k) {
-                            if (posteriors(i-1,k) < max_ || log_transitions(k,j) < max_)
+                            if (likelihoods(i-1,k) < max_ || log_transitions(k,j) < max_)
                                 continue;
-                            float tmp_prob = t(i-1,k) + log_transitions(k,j);
+                            float tmp_prob = posteriors(i-1,k) + log_transitions(k,j);
                             if (((k+1) % 3) == 0 && k != j && k!= j-1 && k!= j-2) // HACK TODO check/remove
                                 tmp_prob -= insertion_penalty;
                             if (tmp_prob > max_) {
@@ -209,45 +213,45 @@ def viterbi(posteriors, transitions, map_states_to_phones, using_bigram=False,
                                 max_ind = k;
                             }
                         }
-                        t(i,j) = max_ + posteriors(i,j);
+                        posteriors(i,j) = max_ + likelihoods(i,j);
                         backpointers(i-1,j) = max_ind;
                     }
                 }
                 """
         err = weave.inline(code_c,
                 ['px', 'py', 'log_transitions', 'insertion_penalty',
-                    'posteriors', 't', 'backpointers'],
+                    'likelihoods', 'posteriors', 'backpointers'],
                 type_converters=converters.blitz,
                 compiler = 'gcc')
     except:
-        for i in xrange(1, posteriors.shape[0]):
-            for j in xrange(posteriors.shape[1]):
+        for i in xrange(1, likelihoods.shape[0]):
+            for j in xrange(likelihoods.shape[1]):
                 max_ = -1000000.0 # log
                 max_ind = -2
                 for k in nonnulls:
                     #if transitions[1][k][j] == 0.0:
                     if log_transitions[k][j] < max_:
                         continue
-                    tmp_prob = t[i-1][k] + log_transitions[k][j] # log
+                    tmp_prob = posteriors[i-1][k] + log_transitions[k][j] # log
                     if ((k+1) % 3) == 0 and not (j-2 <= k <= j): # HACK TODO check/remove
                         tmp_prob -= insertion_penalty
                     if tmp_prob > max_:
                         max_ = tmp_prob
                         max_ind = k
-                t[i][j] = max_ + posteriors[i][j] # log
+                posteriors[i][j] = max_ + likelihoods[i][j] # log
                 backpointers[i-1][j] = max_ind
-            nonnulls = [jj for jj, val in enumerate(t[i]) if val > -1000000.0] # log
+            nonnulls = [jj for jj, val in enumerate(posteriors[i]) if val > -1000000.0] # log
             if len(nonnulls) == 0:
-                print >> sys.stderr, ">>>>>>>>> NONNULLS IS EMPTY", i, posteriors.shape[0]
+                print >> sys.stderr, ">>>>>>>>> NONNULLS IS EMPTY", i, likelihoods.shape[0]
 
     if using_bigram:
-        states = deque([(ending_state, t[posteriors.shape[0]-1][ending_state])])
+        states = deque([(ending_state, posteriors[likelihoods.shape[0]-1][ending_state])])
     else:
-        states = deque([(t[posteriors.shape[0]-1].argmax(), t[posteriors.shape[0]-1].max())])
-    for i in xrange(posteriors.shape[0] - 2, -1, -1):
-        states.appendleft((backpointers[i][states[0][0]], t[i][backpointers[i][states[0][0]]]))
-        #states.appendleft((t[i].argmax(), t[i].max()))
-    return states
+        states = deque([(posteriors[likelihoods.shape[0]-1].argmax(), posteriors[likelihoods.shape[0]-1].max())])
+    for i in xrange(likelihoods.shape[0] - 2, -1, -1):
+        states.appendleft((backpointers[i][states[0][0]], posteriors[i][backpointers[i][states[0][0]]]))
+        #states.appendleft((posteriors[i].argmax(), posteriors[i].max()))
+    return states # posteriors, TODO
 
 
 def online_viterbi(mat, gmms_, transitions):
@@ -299,14 +303,18 @@ def initialize_transitions(trans, phones_frequencies=None, scale_factor=1.0):
             #if phn2 != phn1:
             if phones_frequencies != None:
                 value = to_distribute * phones_frequencies[phn2]
-            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = value
+            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = (scale_factor 
+                    * value)
+        if scale_factor != 1.0: # why this if? so that with scale_factor=1
+                                # we test other ops goodness with the assert
+            trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0)
         assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
     return trans
 
 
 def parse_lm(trans, f, scale_factor=1.0):
     """ parse ARPA MIT-LL backed-off bigrams in f """
-    # TODO SCALE FACTOR
+    # TODO check SCALE_FACTOR scale_factor
     p_1grams = {}
     b_1grams = {}
     p_2grams = defaultdict(lambda: {}) # p_2grams[A][B] = unnormalized P(A|B)
@@ -329,7 +337,7 @@ def parse_lm(trans, f, scale_factor=1.0):
             if len(l) > 2:
                 b_1grams[l[1]] = float(l[2]) # log10 prob
             else:
-                b_1grams[l[1]] = -100.0 # guess that's low enough
+                b_1grams[l[1]] = -10000.0 # guess that's low enough
         elif parsing2grams:
             l = clean(line).split()
             if len(l) != 3:
@@ -353,12 +361,16 @@ def parse_lm(trans, f, scale_factor=1.0):
     # I but prefer to keep it separated
     for phn1, d in p_2grams.iteritems():
         phone1 = trans[0][phn1]
-        buffer_prob = 1.0 - trans[1][phone1.to_ind[len(phone1.to_ind) - 1]].sum(0)
+        buffer_prob = 1.0 - trans[1][phone1.to_ind[-1]].sum(0)
         assert(buffer_prob != 0.0) # you would never go out of this phone (/!\ !EXIT)
         for phn2, log_prob in d.iteritems():
             # transition from phn1 to phn2
             phone2 = trans[0][phn2]
-            trans[1][phone1.to_ind[len(phone1.to_ind) - 1]][phone2.to_ind[0]] = buffer_prob * (10 ** log_prob)
+            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = (scale_factor 
+                    * buffer_prob * (10 ** log_prob))
+            if scale_factor != 1.0: # why this if? so that with scale_factor=1
+                                    # we test other ops with the assert
+                trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0)
         assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
     return trans
 
@@ -435,8 +447,30 @@ def parse_hmm(f):
     return n_states_tot, transitions, gmms
 
 
+class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
+    def __init__(self, gmms_, map_states_to_phones, transitions,
+            using_bigram=False):
+        self.gmms_ = gmms_
+        self.map_states_to_phones = map_states_to_phones
+        self.transitions = transitions
+        self.using_bigram = using_bigram
+    def __call__(self, line):
+        cline = clean(line)
+        if VERBOSE:
+            print cline
+        likelihoods = compute_likelihoods(htkmfc.open(cline).getall(), 
+                self.gmms_) # len(gmms_) == n_states
+        s = '"' + cline[:-3] + 'rec"\n' + \
+                string_mlf(self.map_states_to_phones,
+                        viterbi(likelihoods, self.transitions, 
+                            self.map_states_to_phones,
+                            using_bigram=self.using_bigram,
+                            insertion_penalty=INSERTION_PENALTY),
+                        phones_only=True) + '.\n'
+        return s
+
+
 def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
-    SCALE_FACTOR = 5.0
     with open(ihmmfname) as ihmmf:
         n_states, transitions, gmms = parse_hmm(ihmmf)
 
@@ -458,29 +492,10 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
 
     list_mlf_string = []
     with open(iscpfname) as iscpf:
-        for line_number, line in enumerate(iscpf): # TODO parallelize (pool.map for instance)
-            cline = clean(line)
-            if VERBOSE:
-                print cline
-            posteriors = compute_likelihoods(htkmfc.open(cline).getall(), 
-                    gmms_) # len(gmms_) == n_states
-            s = '"' + cline[:-3] + 'rec"\n' + \
-                    string_mlf(map_states_to_phones,
-                            viterbi(posteriors, transitions, 
-                                map_states_to_phones,
-                                using_bigram=(ilmfname != None),
-                                #using_bigram=True,
-                                insertion_penalty=0.0), # 2.5
-                            phones_only=True) + '.\n'
-            #s = '"' + cline[:-3] + 'rec"\n' + \
-            #        string_mlf(map_states_to_phones,
-            #                # cline[:-3] + 'lab',
-            #                online_viterbi(n_states, htkmfc.open(cline).getall(), 
-            #                gmms_, transitions)) + \
-            #        '.\n'
-            list_mlf_string.append(s)
-            #if line_number >= 1: # TODO remove
-            #    break
+        il = InnerLoop(gmms_, map_states_to_phones, transitions,
+                using_bigram=(ilmfname != None))
+        p = Pool(8)
+        list_mlf_string = p.map(il, iscpf)
     with open(ofname, 'w') as of:
         of.write('#!MLF!#\n')
         for line in list_mlf_string:
@@ -492,26 +507,34 @@ if __name__ == "__main__":
         if '--help' in sys.argv:
             print usage
             sys.exit(0)
-        #if '--debug' in sys.argv:
-        l = filter(lambda x: not '--' in x[0:2], sys.argv)
-        options = filter(lambda x: '--' in x[0:2], sys.argv)
-        output_fname = l[1]
-        input_scp_fname = l[2]
-        input_hmm_fname = l[3]
+        args = dict(enumerate(sys.argv))
+        options = filter(lambda (ind, x): '--' in x[0:2], enumerate(sys.argv))
         input_counts_fname = None
         input_lm_fname = None
-        if len(options): # we have unigram counts or a bigram LM
-            for option in options:
+        if len(options): # we have options
+            for ind, option in options:
+                args.pop(ind)
                 if option == '--verbose':
                     VERBOSE = True
-                if option[2] == 'u':
-                    input_counts_fname = option[3:]
+                if option == '--p':
+                    INSERTION_PENALTY = float(args[ind+1])
+                    args.pop(ind+1)
+                if option == '--s':
+                    SCALE_FACTOR = float(args[ind+1])
+                    args.pop(ind+1)
+                if option == '--u':
+                    input_counts_fname = args[ind+1]
+                    args.pop(ind+1)
                     print "initialize the transitions between phones with the unigram lm", input_counts_fname
-                elif option[2] == 'b':
-                    input_lm_fname = option[3:]
+                if option == '--b':
+                    input_lm_fname = args[ind+1]
+                    args.pop(ind+1)
                     print "initialize the transitions between phones with the bigram lm", input_lm_fname
-                else:
-                    print "initialize the transitions between phones uniformly"
+        else:
+            print "initialize the transitions between phones uniformly"
+        output_fname = args.values()[1]
+        input_scp_fname = args.values()[2]
+        input_hmm_fname = args.values()[3]
         process(output_fname, input_scp_fname, 
                 input_hmm_fname, input_counts_fname, input_lm_fname)
     else:
