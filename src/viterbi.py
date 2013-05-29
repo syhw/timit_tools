@@ -6,7 +6,7 @@ import cPickle
 from collections import defaultdict, deque
 import htkmfc
 import itertools
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 
 usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [--u PHONES_COUNTS] 
@@ -494,7 +494,7 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
     with open(iscpfname) as iscpf:
         il = InnerLoop(gmms_, map_states_to_phones, transitions,
                 using_bigram=(ilmfname != None))
-        p = Pool(8)
+        p = Pool(cpu_count())
         list_mlf_string = p.map(il, iscpf)
     with open(ofname, 'w') as of:
         of.write('#!MLF!#\n')
