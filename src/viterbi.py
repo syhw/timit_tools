@@ -511,6 +511,8 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
             insertion_penalty=INSERTION_PENALTY, scale_factor=SCALE_FACTOR)
 
     list_mlf_string = []
+    dummy = np.ndarray((2,2)) # to force only 1 compile of Viterbi's C
+    viterbi(dummy, [None, dummy], {}) # also for this compile's debug purposes
     with open(iscpfname) as iscpf:
         il = InnerLoop(gmms_, map_states_to_phones, transitions,
                 using_bigram=(ilmfname != None))
