@@ -112,7 +112,7 @@ if __name__ == '__main__':
             debug = True
         if '--forcemfcext' in sys.argv:
             forcemfcext = True
-        if '--htk_mfcc' in sys.argv:
+        if '--htk-mfcc' in sys.argv:
             htk_mfcc = True
         if '--stereo' in sys.argv:
             stereo = True
