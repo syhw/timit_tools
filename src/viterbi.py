@@ -20,9 +20,10 @@ python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [--u PHONES_COUNTS]
 
 VERBOSE = False
 THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
-SCALE_FACTOR = 5.0 # importance of the phones->phone trans w.r.t state->state
+SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
-epsilon = 1E-10 # degree of precision for floating (0.0-1.0 probas) operations
+epsilon = 1E-12 # degree of precision for floating (0.0-1.0 probas) operations
+epsilon_log = 1E-80 # to add for logs
 
 class Phone:
     def __init__(self, phn_id, phn):
@@ -168,8 +169,8 @@ def string_mlf(map_states_to_phones, states, phones_only=False):
     return '\n'.join(s)
 
 
-def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False,
-        insertion_penalty=0.0): # TODO insertion_penalty
+def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):#,
+        #insertion_penalty=0.0, scale_factor=1.0):
     """ This function applies Viterbi on the likelihoods already computed """
     starting_state = None
     ending_state = None
@@ -189,7 +190,9 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False,
         nonnulls = [starting_state]
     else:
         nonnulls = [jj for jj, val in enumerate(posteriors[0]) if val > -1000000.0] 
-    log_transitions = np.log(transitions[1] + epsilon) # log
+    log_transitions = transitions[1] # log,
+    # multipliying by the scale factor is like putting the prob to the power
+
     # Main viterbi loop, try with native code if possible
     try:
         from scipy import weave
@@ -206,8 +209,10 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False,
                             if (likelihoods(i-1,k) < max_ || log_transitions(k,j) < max_)
                                 continue;
                             float tmp_prob = posteriors(i-1,k) + log_transitions(k,j);
-                            if (((k+1) % 3) == 0 && k != j && k!= j-1 && k!= j-2) // HACK TODO check/remove
-                                tmp_prob -= insertion_penalty;
+                            //if (((k+1) % 3) == 0 && k != j && k!= j-1 && k!= j-2) // HACK TODO check/remove
+                            //    tmp_prob = posteriors(i-1,k) 
+                            //      + scale_factor * log_transitions(k,j) 
+                            //      - insertion_penalty;
                             if (tmp_prob > max_) {
                                 max_ = tmp_prob;
                                 max_ind = k;
@@ -219,7 +224,8 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False,
                 }
                 """
         err = weave.inline(code_c,
-                ['px', 'py', 'log_transitions', 'insertion_penalty',
+                ['px', 'py', 'log_transitions', 
+                    #'insertion_penalty', 'scale_factor',
                     'likelihoods', 'posteriors', 'backpointers'],
                 type_converters=converters.blitz,
                 compiler = 'gcc')
@@ -233,8 +239,8 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False,
                     if log_transitions[k][j] < max_:
                         continue
                     tmp_prob = posteriors[i-1][k] + log_transitions[k][j] # log
-                    if ((k+1) % 3) == 0 and not (j-2 <= k <= j): # HACK TODO check/remove
-                        tmp_prob -= insertion_penalty
+                    #if ((k+1) % 3) == 0 and not (j-2 <= k <= j): # HACK TODO check/remove
+                    #    tmp_prob = posteriors[i-1][k] + scale_factor * log_transitions[k][j] - insertion_penalty
                     if tmp_prob > max_:
                         max_ = tmp_prob
                         max_ind = k
@@ -292,7 +298,7 @@ def online_viterbi(mat, gmms_, transitions):
     #return t, backpointers
 
 
-def initialize_transitions(trans, phones_frequencies=None, scale_factor=1.0):
+def initialize_transitions(trans, phones_frequencies=None):
     """ takes the transition matrix only inter HMMs and give uniform or unigram
     probabilities of transitions between of each last state and first state """
     for phn1, phone1 in trans[0].iteritems():
@@ -303,24 +309,34 @@ def initialize_transitions(trans, phones_frequencies=None, scale_factor=1.0):
             #if phn2 != phn1:
             if phones_frequencies != None:
                 value = to_distribute * phones_frequencies[phn2]
-            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = (scale_factor 
-                    * value)
-        if scale_factor != 1.0: # why this if? so that with scale_factor=1
-                                # we test other ops goodness with the assert
-            trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0)
+            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = value
+        # trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0)
         assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
     return trans
 
 
-def parse_lm(trans, f, scale_factor=1.0):
+def penalty_scale(trans, insertion_penalty=0.0, scale_factor=1.0):
+    """ adds the insertion penalty and the grammar scale factor to transitions 
+    """
+    log_trans = np.log(trans[1] + epsilon_log)
+    for phn1, phone1 in trans[0].iteritems():
+        for phn2, phone2 in trans[0].iteritems():
+            log_trans[phone1.to_ind[-1]][phone2.to_ind[0]] *= scale_factor
+            log_trans[phone1.to_ind[-1]][phone2.to_ind[0]] -= insertion_penalty
+    print "Insertion penalty:", insertion_penalty, "and grammar scale factor:", scale_factor
+    return (trans[0], log_trans)
+
+
+def parse_lm(trans, f):
     """ parse ARPA MIT-LL backed-off bigrams in f """
-    # TODO check SCALE_FACTOR scale_factor
     p_1grams = {}
     b_1grams = {}
     p_2grams = defaultdict(lambda: {}) # p_2grams[A][B] = unnormalized P(A|B)
     # parse the file to fill the above dicts
     parsing1grams = False
     parsing2grams = False
+    parsed1grams = 0
+    parsed2grams = 0
     for line in f:
         if clean(line) == "":
             continue
@@ -338,12 +354,16 @@ def parse_lm(trans, f, scale_factor=1.0):
                 b_1grams[l[1]] = float(l[2]) # log10 prob
             else:
                 b_1grams[l[1]] = -10000.0 # guess that's low enough
+            parsed1grams += 1
         elif parsing2grams:
             l = clean(line).split()
             if len(l) != 3:
                 print >> sys.stderr, "bad language model file format"
                 sys.exit(-1)
             p_2grams[l[1]][l[2]] = float(l[0]) # log10 prob, already discounted
+            parsed2grams += 1
+    print "Parsed", parsed1grams, "1-grams, and", parsed2grams, "2-grams"
+
     # do the backed-off probs for p_2grams[phn1][phn2] = P(phn2|phn1)
     for phn1, d in p_2grams.iteritems():
         s = 0.0
@@ -356,6 +376,7 @@ def parse_lm(trans, f, scale_factor=1.0):
         s = math.log10(s)
         for phn2, log_prob in d.iteritems():
             p_2grams[phn1][phn2] = log_prob - s
+
     # edit the trans[1] matrix with the backed-off probs,
     # could do in the above "backed-off probs" loop 
     # I but prefer to keep it separated
@@ -366,11 +387,8 @@ def parse_lm(trans, f, scale_factor=1.0):
         for phn2, log_prob in d.iteritems():
             # transition from phn1 to phn2
             phone2 = trans[0][phn2]
-            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = (scale_factor 
-                    * buffer_prob * (10 ** log_prob))
-            if scale_factor != 1.0: # why this if? so that with scale_factor=1
-                                    # we test other ops with the assert
-                trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0)
+            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = buffer_prob * (10 ** log_prob)
+        # trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0)
         assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
     return trans
 
@@ -464,8 +482,9 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
                 string_mlf(self.map_states_to_phones,
                         viterbi(likelihoods, self.transitions, 
                             self.map_states_to_phones,
-                            using_bigram=self.using_bigram,
-                            insertion_penalty=INSERTION_PENALTY),
+                            using_bigram=self.using_bigram),
+                            #insertion_penalty=INSERTION_PENALTY,
+                            #scale_factor=SCALE_FACTOR),
                         phones_only=True) + '.\n'
         return s
 
@@ -480,15 +499,16 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
 
     if ilmfname != None:
         with open(input_lm_fname) as ilmf:
-            transitions = parse_lm(transitions, ilmf, scale_factor=SCALE_FACTOR) # parse bigram LM in ilmf
+            transitions = parse_lm(transitions, ilmf) # parse bigram LM in ilmf
     else:
         phones_frequencies = None
         if iphncountfname != None:
             with open(iphncountfname) as iphnctf:
                 phones_frequencies = phones_freq_from_counts(iphnctf)
         # uniform transitions btwn phones
-        transitions = initialize_transitions(transitions, phones_frequencies,
-                scale_factor=SCALE_FACTOR)
+        transitions = initialize_transitions(transitions, phones_frequencies)
+    transitions = penalty_scale(transitions, 
+            insertion_penalty=INSERTION_PENALTY, scale_factor=SCALE_FACTOR)
 
     list_mlf_string = []
     with open(iscpfname) as iscpf:
