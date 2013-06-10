@@ -10,19 +10,21 @@ from multiprocessing import Pool, cpu_count
 
 usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [--u PHONES_COUNTS] 
-        [--p INSERTION_PENALTY] [--s SCALE_FACTOR] [--b INPUT_LM] 
+        [--p INSERTION_PENALTY] [--s SCALE_FACTOR] [--b INPUT_LM] [--w WDNET]
 
-    --u followed (without space) by a unigram count dict pickle
-    --b followed (without space) by an HTK bigram file (ARPA-MIT LL)
+    --u followed by a unigram count dict pickle
+    --b followed by an HTK bigram file (ARPA-MIT LL or matrix bigram, see code)
         /!\ A bigram LM will only work if there are sentences start/end
             (the default symbols are !ENTER/!EXIT)
+    --w followed by a wordnet (bigram only)
 """
 
 VERBOSE = False
+MATRIX_BIGRAM = True # is the bigram file format a matrix? (ARPA-MIT if False)
 THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
-SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
+SCALE_FACTOR = 5.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
-epsilon = 1E-12 # degree of precision for floating (0.0-1.0 probas) operations
+epsilon = 1E-6 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
 
 class Phone:
@@ -298,6 +300,39 @@ def online_viterbi(mat, gmms_, transitions):
     #return t, backpointers
 
 
+def parse_wdnet(trans, iwdnf):
+    """ puts transition probabilities with bigram LM generated wdnet:
+        HBuild -m bigramLM dict wdnetbigram
+    """
+    indices_to_phones = {}
+    n_phones = 0
+    bp = {} # buffer prob, 
+    # filled before the first time that we modify a final state trans. proba
+    for line in iwdnf:
+        line = line.rstrip('\n').split()
+        ident = line[0][0:2]
+        if ident == "N=":
+            n_phones = int(line[0].split('=')[1])
+        elif ident == "I=":
+            indices_to_phones[line[0].split('=')[1]] = line[1].split('=')[1]
+        elif ident == "J=":
+            phn1 = indices_to_phones[line[1].split('=')[1]]
+            phn2 = indices_to_phones[line[2].split('=')[1]]
+            log_prob = float(line[3].split('=')[1])
+            phone1 = trans[0][phn1]
+            phone2 = trans[0][phn2]
+            bp[phn1] = bp.get(phn1, 1.0 - trans[1][phone1.to_ind[-1]].sum(0))
+            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = bp[phn1] * np.exp(log_prob)
+
+    assert(n_phones == len(indices_to_phones))
+    for phn1, phone1 in trans[0].iteritems():
+        trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0) # TODO remove (that's because of !EXIT)
+        #print trans[1][phone1.to_ind[-1]].sum(0)
+        assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
+    np.save(open('wdnet_transitions.npy', 'w'), trans[1])
+    return trans
+
+
 def initialize_transitions(trans, phones_frequencies=None):
     """ takes the transition matrix only inter HMMs and give uniform or unigram
     probabilities of transitions between of each last state and first state """
@@ -316,7 +351,10 @@ def initialize_transitions(trans, phones_frequencies=None):
 
 
 def penalty_scale(trans, insertion_penalty=0.0, scale_factor=1.0):
-    """ adds the insertion penalty and the grammar scale factor to transitions 
+    """ 
+     * transforms the transition probabilisties matrix in logs probabilities
+     * adds the insertion penalty
+     * multiplies the phones transitions by the grammar scale factor
     """
     log_trans = np.log(trans[1] + epsilon_log)
     for phn1, phone1 in trans[0].iteritems():
@@ -327,11 +365,53 @@ def penalty_scale(trans, insertion_penalty=0.0, scale_factor=1.0):
     return (trans[0], log_trans)
 
 
+def parse_lm_matrix(trans, f):
+    import re
+    l = [re.sub('[ ]+', ' ', line.rstrip('\n').replace('  ', ' ')) 
+            for line in f]
+    ll = [] # split lines
+    p = {} # p[A][B] = P(B|A), probability
+    phones = [] # order
+    for line in l:
+        tmp = line.split()
+        p[tmp[0]] = {}
+        ll.append(tmp[1:])
+        phones.append(tmp[0])
+    for i, probs in enumerate(ll):
+        j = 0
+        tmp_probs = []
+        for j, prob in enumerate(probs):
+            if '*' in prob:
+                pr, k = prob.split('*')
+                for kk in range(int(k)):
+                    tmp_probs.append(pr)
+            else:
+                tmp_probs.append(prob)
+        assert(len(tmp_probs) == len(phones) == len(p.keys()))
+        for j, prob in enumerate(tmp_probs):
+            p[phones[i]][phones[j]] = float(prob)
+
+    for phn1, d in p.iteritems():
+        phone1 = trans[0][phn1]
+        #print phn1
+        #print phone1.to_ind
+        #print trans[1][phone1.to_ind[-1]]
+        buffer_prob = 1.0 - trans[1][phone1.to_ind[-1]].sum(0)
+        assert(buffer_prob != 0.0) # you would never go out of this phone (/!\ !EXIT)
+        for phn2, prob in d.iteritems():
+            # transition from phn1 to phn2
+            phone2 = trans[0][phn2]
+            trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = buffer_prob * prob
+        assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we have normalized probs
+    np.save(open('matrix_transitions.npy', 'w'), trans[1])
+    return trans
+
+
 def parse_lm(trans, f):
     """ parse ARPA MIT-LL backed-off bigrams in f """
     p_1grams = {}
     b_1grams = {}
-    p_2grams = defaultdict(lambda: {}) # p_2grams[A][B] = unnormalized P(A|B)
+    p_2grams = defaultdict(lambda: {}) # p_2grams[A][B] = log10 P(B|A)
     # parse the file to fill the above dicts
     parsing1grams = False
     parsing2grams = False
@@ -353,7 +433,7 @@ def parse_lm(trans, f):
             if len(l) > 2:
                 b_1grams[l[1]] = float(l[2]) # log10 prob
             else:
-                b_1grams[l[1]] = -10000.0 # guess that's low enough
+                b_1grams[l[1]] = -10000000.0 # guess that's low enough
             parsed1grams += 1
         elif parsing2grams:
             l = clean(line).split()
@@ -365,31 +445,38 @@ def parse_lm(trans, f):
     print "Parsed", parsed1grams, "1-grams, and", parsed2grams, "2-grams"
 
     # do the backed-off probs for p_2grams[phn1][phn2] = P(phn2|phn1)
-    for phn1, d in p_2grams.iteritems():
-        s = 0.0
-        for phn2, log_prob in d.iteritems():
-            # j follows i, p(j)*b(i)
-            if log_prob < p_1grams[phn2] + b_1grams[phn1] \
-                    or log_prob < THRESHOLD_BIGRAMS:
-                p_2grams[phn1][phn2] = p_1grams[phn2] + b_1grams[phn1]
-            s += 10 ** p_2grams[phn1][phn2]
-        s = math.log10(s)
-        for phn2, log_prob in d.iteritems():
-            p_2grams[phn1][phn2] = log_prob - s
+#    for phn1, d in p_2grams.iteritems():
+#        s = 0.0
+#        for phn2, log_prob in d.iteritems():
+#            # j follows i, p(j)*b(i)
+#            if log_prob < p_1grams[phn2] + b_1grams[phn1] \
+#                    or log_prob < THRESHOLD_BIGRAMS:
+#                p_2grams[phn1][phn2] = p_1grams[phn2] + b_1grams[phn1]
+#            s += 10 ** p_2grams[phn1][phn2]
+#        s = math.log10(s)
+#        for phn2, log_prob in d.iteritems():
+#            p_2grams[phn1][phn2] = log_prob - s
 
     # edit the trans[1] matrix with the backed-off probs,
     # could do in the above "backed-off probs" loop 
     # I but prefer to keep it separated
-    for phn1, d in p_2grams.iteritems():
+    for phn1, p1g in p_1grams.iteritems():
+    #for phn1, d in p_2grams.iteritems():
         phone1 = trans[0][phn1]
         buffer_prob = 1.0 - trans[1][phone1.to_ind[-1]].sum(0)
         assert(buffer_prob != 0.0) # you would never go out of this phone (/!\ !EXIT)
-        for phn2, log_prob in d.iteritems():
+        for phn2, b1g in b_1grams.iteritems():
+        #for phn2, log_prob in d.iteritems():
             # transition from phn1 to phn2
             phone2 = trans[0][phn2]
+            log_prob = b1g + p1g
+            if phn1 in p_2grams and phn2 in p_2grams[phn1]:
+                log_prob = p_2grams[phn1][phn2]
             trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = buffer_prob * (10 ** log_prob)
-        # trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0)
+        trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0) # TODO remove (that's because of !EXIT)
+        #print trans[1][phone1.to_ind[-1]].sum(0)
         assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
+    np.save(open('ARPA-MIT_transitions.npy', 'w'), trans[1])
     return trans
 
 
@@ -489,7 +576,9 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
         return s
 
 
-def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
+def process(ofname, iscpfname, ihmmfname, 
+        iphncountfname=None, ilmfname=None, iwdnetfname=None):
+
     with open(ihmmfname) as ihmmf:
         n_states, transitions, gmms = parse_hmm(ihmmf)
 
@@ -497,9 +586,15 @@ def process(ofname, iscpfname, ihmmfname, iphncountfname, ilmfname):
     #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
     map_states_to_phones = phones_mapping(gmms)
 
-    if ilmfname != None:
-        with open(input_lm_fname) as ilmf:
-            transitions = parse_lm(transitions, ilmf) # parse bigram LM in ilmf
+    if iwdnetfname != None:
+        with open(iwdnetfname) as iwdnf:
+            transitions = parse_wdnet(transitions, iwdnf) # parse wordnet
+    elif ilmfname != None:
+        with open(ilmfname) as ilmf:
+            if MATRIX_BIGRAM:
+                transitions = parse_lm_matrix(transitions, ilmf) # parse bigram LM in matrix format in ilmf
+            else:
+                transitions = parse_lm(transitions, ilmf) # parse bigram LM in ARPA-MIT in ilmf
     else:
         phones_frequencies = None
         if iphncountfname != None:
@@ -533,6 +628,7 @@ if __name__ == "__main__":
         options = filter(lambda (ind, x): '--' in x[0:2], enumerate(sys.argv))
         input_counts_fname = None
         input_lm_fname = None
+        input_wdnet_fname = None
         if len(options): # we have options
             for ind, option in options:
                 args.pop(ind)
@@ -552,13 +648,19 @@ if __name__ == "__main__":
                     input_lm_fname = args[ind+1]
                     args.pop(ind+1)
                     print "initialize the transitions between phones with the bigram lm", input_lm_fname
+                if option == '--w':
+                    input_wdnet_fname = args[ind+1]
+                    args.pop(ind+1)
+                    print "initialize the transitions between phones with the wordnet", input_wdnet_fname
+                    print "WILL IGNORE LANGUAGE MODELS!"
         else:
             print "initialize the transitions between phones uniformly"
         output_fname = args.values()[1]
         input_scp_fname = args.values()[2]
         input_hmm_fname = args.values()[3]
         process(output_fname, input_scp_fname, 
-                input_hmm_fname, input_counts_fname, input_lm_fname)
+                input_hmm_fname, input_counts_fname, 
+                input_lm_fname, input_wdnet_fname)
     else:
         print usage
         sys.exit(-1)

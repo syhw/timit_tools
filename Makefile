@@ -181,7 +181,8 @@ bigram_LM:
 	@echo "*** Estimating a bigram language model (only with !ENTER & !EXIT) ***"
 	# cp $(dataset_train_folder)/train.mlf $(TMP_TRAIN_FOLDER)/train.mlf
 	HLStats -o -b $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/train.mlf
-	HBuild -n $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnetbigram
+	#HBuild -n $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnetbigram
+	HBuild -m $(TMP_TRAIN_FOLDER)/bigram2 $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnetbigram
 
 
 test_monophones:
