@@ -176,12 +176,12 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):
     """ This function applies Viterbi on the likelihoods already computed """
     starting_state = None
     ending_state = None
-    for state, phone in map_states_to_phones.iteritems():
-        if using_bigram:
-            if phone == '!ENTER[2]' or phone == 'h#[2]': # hardcoded TODO remove
-                starting_state = state
-            if phone == '!EXIT[4]' or phone == 'h#[4]': # hardcoded TODO remove
-                ending_state = state
+    #for state, phone in map_states_to_phones.iteritems():
+        #if using_bigram:
+        #    if phone == '!ENTER[2]' or phone == 'h#[2]': # hardcoded TODO remove
+        #        starting_state = state
+        #    if phone == '!EXIT[4]' or phone == 'h#[4]': # hardcoded TODO remove
+        #        ending_state = state
     posteriors = np.ndarray((likelihoods.shape[0], likelihoods.shape[1]))
     posteriors[:] = -1000000.0 # log
     posteriors[0] = likelihoods[0] # log
@@ -193,7 +193,6 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):
     else:
         nonnulls = [jj for jj, val in enumerate(posteriors[0]) if val > -1000000.0] 
     log_transitions = transitions[1] # log,
-    # multipliying by the scale factor is like putting the prob to the power
 
     # Main viterbi loop, try with native code if possible
     try:
