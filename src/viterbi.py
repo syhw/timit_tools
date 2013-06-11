@@ -176,12 +176,12 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):
     """ This function applies Viterbi on the likelihoods already computed """
     starting_state = None
     ending_state = None
-    #for state, phone in map_states_to_phones.iteritems():
-        #if using_bigram:
-        #    if phone == '!ENTER[2]' or phone == 'h#[2]': # hardcoded TODO remove
-        #        starting_state = state
-        #    if phone == '!EXIT[4]' or phone == 'h#[4]': # hardcoded TODO remove
-        #        ending_state = state
+    for state, phone in map_states_to_phones.iteritems():
+        if using_bigram:
+            if phone == '!ENTER[2]' or phone == 'h#[2]': # hardcoded TODO remove
+                starting_state = state
+            if phone == '!EXIT[4]' or phone == 'h#[4]': # hardcoded TODO remove
+                ending_state = state
     posteriors = np.ndarray((likelihoods.shape[0], likelihoods.shape[1]))
     posteriors[:] = -1000000.0 # log
     posteriors[0] = likelihoods[0] # log
@@ -392,9 +392,6 @@ def parse_lm_matrix(trans, f):
 
     for phn1, d in p.iteritems():
         phone1 = trans[0][phn1]
-        #print phn1
-        #print phone1.to_ind
-        #print trans[1][phone1.to_ind[-1]]
         buffer_prob = 1.0 - trans[1][phone1.to_ind[-1]].sum(0)
         assert(buffer_prob != 0.0) # you would never go out of this phone (/!\ !EXIT)
         for phn2, prob in d.iteritems():
@@ -459,16 +456,16 @@ def parse_lm(trans, f):
     # edit the trans[1] matrix with the backed-off probs,
     # could do in the above "backed-off probs" loop 
     # I but prefer to keep it separated
-    for phn1, p1g in p_1grams.iteritems():
+    for phn1, b1_1g in b_1grams.iteritems():
     #for phn1, d in p_2grams.iteritems():
         phone1 = trans[0][phn1]
         buffer_prob = 1.0 - trans[1][phone1.to_ind[-1]].sum(0)
         assert(buffer_prob != 0.0) # you would never go out of this phone (/!\ !EXIT)
-        for phn2, b1g in b_1grams.iteritems():
+        for phn2, p2_1g in p_1grams.iteritems():
         #for phn2, log_prob in d.iteritems():
             # transition from phn1 to phn2
             phone2 = trans[0][phn2]
-            log_prob = b1g + p1g
+            log_prob = p2_1g + b1_1g
             if phn1 in p_2grams and phn2 in p_2grams[phn1]:
                 log_prob = p_2grams[phn1][phn2]
             trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = buffer_prob * (10 ** log_prob)
@@ -604,9 +601,10 @@ def process(ofname, iscpfname, ihmmfname,
     transitions = penalty_scale(transitions, 
             insertion_penalty=INSERTION_PENALTY, scale_factor=SCALE_FACTOR)
 
-    list_mlf_string = []
     dummy = np.ndarray((2,2)) # to force only 1 compile of Viterbi's C
     viterbi(dummy, [None, dummy], {}) # also for this compile's debug purposes
+
+    list_mlf_string = []
     with open(iscpfname) as iscpf:
         il = InnerLoop(gmms_, map_states_to_phones, transitions,
                 using_bigram=(ilmfname != None))
