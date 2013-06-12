@@ -579,7 +579,8 @@ def process(ofname, iscpfname, ihmmfname,
                 transitions = parse_lm_matrix(transitions, ilmf) # parse bigram LM in matrix format in ilmf
             else:
                 transitions = parse_lm(transitions, ilmf) # parse bigram LM in ARPA-MIT in ilmf
-    elif unibifname != None:
+    elif unibifname != None: # our own unigram and bigram counts,
+                             # c.f. src/produce_LM.py
         with open(unibifname) as ubf:
             transitions = initialize_transitions(transitions, ubf, 
                     unigrams_only=UNIGRAMS_ONLY)
