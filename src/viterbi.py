@@ -18,11 +18,11 @@ Exclusive uses of these options:
         /!\ A bigram LM will only work if there are sentences start/end
             (the default symbols are !ENTER/!EXIT)
     --w followed by a wordnet (bigram only)
-    --u followed by a unigram count dict pickle (MARKED FOR DEPRECATION TODO)
     --ub followed by a pickled bigram file (apply src/produce_LM.py to a MLF)
 """
 
 VERBOSE = False
+UNIGRAMS_ONLY = False # says if we use only unigrams when we have _our_ bigrams
 MATRIX_BIGRAM = True # is the bigram file format a matrix? (ARPA-MIT if False)
 THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
 SCALE_FACTOR = 5.0 # importance of the LM w.r.t. the acoustics
@@ -77,31 +77,6 @@ def precompute_det_inv(gmms):
                     np.array(mu_k).T, 
                     np.array(inv_sigma).T))
     return ret
-
-
-def states_freq_from_counts(picklef, map_states_to_phones):
-    """ from a pickled dict[phn]=count created by src/substitute_phones.py,
-    computes the phones log-frequency and create the state aligned numpy array 
-    """
-    t = cPickle.load(picklef)
-    tot = sum(t.itervalues())
-    for phn, count in t.iteritems():
-        t[phn] = count * 1.0 / tot
-    tmp = []
-    for i in xrange(len(map_states_to_phones)):
-        tmp.append(t[map_states_to_phones[i].split('[')[0]])
-    return np.log(np.array(tmp, dtype="float64"))
-
-
-def phones_freq_from_counts(picklef):
-    """ from a pickled dict[phn]=count created by src/substitute_phones.py,
-    computes the phones log-frequency and create the state aligned numpy array 
-    """
-    t = cPickle.load(picklef)
-    tot = sum(t.itervalues())
-    for phn, count in t.iteritems():
-        t[phn] = count * 1.0 / tot
-    return t
 
 
 def compute_likelihoods(mat, gmms_):
@@ -335,30 +310,26 @@ def parse_wdnet(trans, iwdnf):
     return trans
 
 
-def initialize_transitions(trans, phones_frequencies=None, unibi=None):
+def initialize_transitions(trans, unibi=None, unigrams_only=False):
     """ takes the transition matrix only inter HMMs and give uniform or unigram
     probabilities of transitions between of each last state and first state """
     uni = None
     bi = None
     if unibi != None:
         uni, bi, discounts = cPickle.load(unibi)
-    if phones_frequencies != None:
-        uni = phones_freq_from_counts(phones_frequencies)
     for phn1, phone1 in trans[0].iteritems():
         already_in_prob = trans[1][phone1.to_ind[-1]][phone1.to_ind[-1]]
         to_distribute = (1.0 - already_in_prob) 
         value = to_distribute / (len(trans[0])) # - 1)
         for phn2, phone2 in trans[0].iteritems():
             if bi != None: # bigrams
-                if phn1 in bi:
+                if not unigrams_only and phn1 in bi: # we use the full bigrams!
                     if phn2 in bi[phn1]:
                         value = to_distribute * bi[phn1][phn2]
                     else:
                         value = to_distribute * discounts[phn1] * uni[phn1]
                 else: # phn1 not in bi means it's _always_ the last phone
                     value = to_distribute * uni[phn1]
-            elif uni != None: # unigrams
-                value = to_distribute * uni[phn2]
             trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = value
         #print trans[1][phone1.to_ind[-1]].sum(0)
         trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0) # we need this because of approximations
@@ -590,7 +561,7 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
 
 
 def process(ofname, iscpfname, ihmmfname, 
-        iphncountfname=None, ilmfname=None, iwdnetfname=None, unibifname=None):
+        ilmfname=None, iwdnetfname=None, unibifname=None):
 
     with open(ihmmfname) as ihmmf:
         n_states, transitions, gmms = parse_hmm(ihmmf)
@@ -610,16 +581,11 @@ def process(ofname, iscpfname, ihmmfname,
                 transitions = parse_lm(transitions, ilmf) # parse bigram LM in ARPA-MIT in ilmf
     elif unibifname != None:
         with open(unibifname) as ubf:
-            transitions = initialize_transitions(transitions, None, ubf)
+            transitions = initialize_transitions(transitions, ubf, 
+                    unigrams_only=UNIGRAMS_ONLY)
     else:
-        phones_frequencies = None
-        if iphncountfname != None:
-            # unigram transitions between phones
-            with open(iphncountfname) as iphnctf:
-                transitions = initialize_transitions(transitions, iphnctf)
-        else:
-            # uniform transitions between phones
-            transitions = initialize_transitions(transitions, iphnctf)
+        # uniform transitions between phones
+        transitions = initialize_transitions(transitions)
     transitions = penalty_scale(transitions, 
             insertion_penalty=INSERTION_PENALTY, scale_factor=SCALE_FACTOR)
 
@@ -645,7 +611,6 @@ if __name__ == "__main__":
             sys.exit(0)
         args = dict(enumerate(sys.argv))
         options = filter(lambda (ind, x): '--' in x[0:2], enumerate(sys.argv))
-        input_counts_fname = None # counts for unigram freq
         input_unibi_fname = None # my bigram LM
         input_lm_fname = None # HStats bigram LMs (either matrix of ARPA-MIT)
         input_wdnet_fname = None # HTK's wdnet (with bigram probas)
@@ -660,10 +625,6 @@ if __name__ == "__main__":
                 if option == '--s':
                     SCALE_FACTOR = float(args[ind+1])
                     args.pop(ind+1)
-                if option == '--u': # TODO deprecate
-                    input_counts_fname = args[ind+1]
-                    args.pop(ind+1)
-                    print "initialize the transitions between phones with the unigram lm", input_counts_fname
                 if option == '--ub':
                     input_unibi_fname = args[ind+1]
                     args.pop(ind+1)
@@ -683,8 +644,8 @@ if __name__ == "__main__":
         input_scp_fname = args.values()[2]
         input_hmm_fname = args.values()[3]
         process(output_fname, input_scp_fname, 
-                input_hmm_fname, input_counts_fname,
-                input_lm_fname, input_wdnet_fname, input_unibi_fname)
+                input_hmm_fname, input_lm_fname, 
+                input_wdnet_fname, input_unibi_fname)
     else:
         print usage
         sys.exit(-1)
