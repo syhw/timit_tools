@@ -11,7 +11,7 @@ from multiprocessing import Pool, cpu_count
 usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM  
         [--p INSERTION_PENALTY] [--s SCALE_FACTOR] 
-        [--b INPUT_LM] [--w WDNET] [--u PHONES_COUNTS] [--ub UNI&BI_LM]
+        [--b INPUT_LM] [--w WDNET] [--u PHONES_COUNTS] [--ub UNI&BIGRAM_LM]
 
 Exclusive uses of these options:
     --b followed by an HTK bigram file (ARPA-MIT LL or matrix bigram, see code)
