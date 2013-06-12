@@ -232,44 +232,6 @@ def viterbi(likelihoods, transitions, map_states_to_phones,
     return states # posteriors, TODO
 
 
-def online_viterbi(mat, gmms_, transitions):
-    """ This function applied Viterbi and computes the likelihoods from gmms_
-    with the features values in mat only when needed (exploiting transitions 
-    sparsity). Slow because full Python """
-    # transform to from e.g. (sigma2_invs) 39*39*17 to 17*39*39
-    g = map(lambda (pis, mus, sigma_invs): (pis, mus.T, sigma_invs.T), gmms_) 
-    t = np.ndarray((mat.shape[0], len(gmms_)))
-    t[:] = -1000000.0 # log
-    t[0] = map(math.log, map(functools.partial(eval_gauss_mixt, mat[0]), g)) # log
-    # t[0][STARTING_STATE(i.e. first !ENTER state)] = eval_gauss_mixt(mat[0], g[THIS STATE]) # TODO we should start with !ENTER
-    backpointers = np.ndarray((mat.shape[0]-1, len(gmms_)), dtype=int)
-    backpointers[:] = -1
-    nonnulls = [jj for jj, val in enumerate(t[0]) if val > -1000000.0] # log
-    for i in xrange(1, mat.shape[0]):
-        for j in xrange(len(gmms_)):
-            max_ = -1000000.0 # log
-            max_ind = -2
-            for k in nonnulls:
-                if transitions[1][k][j] == 0.0:
-                    continue
-                tmp_prob = (t[i-1][k] + math.log(transitions[1][k][j]) # log
-                        + math.log(eval_gauss_mixt(mat[i], g[j])))     # log
-                if tmp_prob > max_:
-                    max_ = tmp_prob
-                    max_ind = k
-            t[i][j] = max_ # log
-            backpointers[i-1][j] = max_ind
-        nonnulls = [jj for jj, val in enumerate(t[i]) if val > -1000000.0] # log
-        if len(nonnulls) == 0:
-            print >> sys.stderr, ">>>>>>>>> NONNULLS IS EMPTY", i, mat.shape[0]
-    states = deque([(t[mat.shape[0]-1].argmax(), t[mat.shape[0]-1].max())])
-    for i in xrange(mat.shape[0] - 2, -1, -1):
-        states.appendleft((backpointers[i][states[0][0]], t[i][backpointers[i][states[0][0]]]))
-        #states.appendleft((t[i].argmax(), t[i].max()))
-    return states
-    #return t, backpointers
-
-
 def parse_wdnet(trans, iwdnf):
     """ puts transition probabilities with bigram LM generated wdnet:
         HBuild -m bigramLM dict wdnetbigram
