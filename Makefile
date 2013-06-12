@@ -242,8 +242,9 @@ all:
 	make bigram_LM
 	make test_monophones_bigram_LM dataset_test_folder=$(dataset)/test
 
-
-
+test_my_bigram:
+	python src/viterbi.py $(TMP_TRAIN_FOLDER)/my_viterbi.mlf ~/datasets/TIMIT/test/test.scp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs --ub $(TMP_TRAIN_FOLDER)/bigram.pickle
+	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/my_viterbi.mlf
 
 clean:
 	rm -rf $(TMP_TRAIN_FOLDER)
