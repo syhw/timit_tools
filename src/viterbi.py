@@ -25,7 +25,7 @@ VERBOSE = False
 UNIGRAMS_ONLY = False # says if we use only unigrams when we have _our_ bigrams
 MATRIX_BIGRAM = True # is the bigram file format a matrix? (ARPA-MIT if False)
 THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
-SCALE_FACTOR = 5.0 # importance of the LM w.r.t. the acoustics
+SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
 epsilon = 1E-6 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
@@ -149,8 +149,8 @@ def string_mlf(map_states_to_phones, states, phones_only=False):
     return '\n'.join(s)
 
 
-def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):#,
-        #insertion_penalty=0.0, scale_factor=1.0):
+def viterbi(likelihoods, transitions, map_states_to_phones, 
+        using_bigram=False):
     """ This function applies Viterbi on the likelihoods already computed """
     starting_state = None
     ending_state = None
@@ -188,10 +188,6 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):
                             if (likelihoods(i-1,k) < max_ || log_transitions(k,j) < max_)
                                 continue;
                             float tmp_prob = posteriors(i-1,k) + log_transitions(k,j);
-                            //if (((k+1) % 3) == 0 && k != j && k!= j-1 && k!= j-2) // HACK TODO check/remove
-                            //    tmp_prob = posteriors(i-1,k) 
-                            //      + scale_factor * log_transitions(k,j) 
-                            //      - insertion_penalty;
                             if (tmp_prob > max_) {
                                 max_ = tmp_prob;
                                 max_ind = k;
@@ -204,7 +200,6 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):
                 """
         err = weave.inline(code_c,
                 ['px', 'py', 'log_transitions', 
-                    #'insertion_penalty', 'scale_factor',
                     'likelihoods', 'posteriors', 'backpointers'],
                 type_converters=converters.blitz,
                 compiler = 'gcc')
@@ -218,14 +213,12 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):
                     if log_transitions[k][j] < max_:
                         continue
                     tmp_prob = posteriors[i-1][k] + log_transitions[k][j] # log
-                    #if ((k+1) % 3) == 0 and not (j-2 <= k <= j): # HACK TODO check/remove
-                    #    tmp_prob = posteriors[i-1][k] + scale_factor * log_transitions[k][j] - insertion_penalty
                     if tmp_prob > max_:
                         max_ = tmp_prob
                         max_ind = k
                 posteriors[i][j] = max_ + likelihoods[i][j] # log
                 backpointers[i-1][j] = max_ind
-            nonnulls = [jj for jj, val in enumerate(posteriors[i]) if val > -1000000.0] # log
+            nonnulls = [jj for jj, val in enumerate(likelihoods[i]) if val > -1000000.0] # log
             if len(nonnulls) == 0:
                 print >> sys.stderr, ">>>>>>>>> NONNULLS IS EMPTY", i, likelihoods.shape[0]
 
@@ -554,8 +547,6 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
                         viterbi(likelihoods, self.transitions, 
                             self.map_states_to_phones,
                             using_bigram=self.using_bigram),
-                            #insertion_penalty=INSERTION_PENALTY,
-                            #scale_factor=SCALE_FACTOR),
                         phones_only=True) + '.\n'
         return s
 
