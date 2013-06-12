@@ -11,7 +11,7 @@ from multiprocessing import Pool, cpu_count
 usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM  
         [--p INSERTION_PENALTY] [--s SCALE_FACTOR] 
-        [--b INPUT_LM] [--w WDNET] [--u PHONES_COUNTS] [--ub UNI&BIGRAM_LM]
+        [--b INPUT_LM] [--w WDNET] [--ub UNI&BIGRAM_LM]
 
 Exclusive uses of these options:
     --b followed by an HTK bigram file (ARPA-MIT LL or matrix bigram, see code)
@@ -267,16 +267,23 @@ def parse_wdnet(trans, iwdnf):
 
 def initialize_transitions(trans, unibi=None, unigrams_only=False):
     """ takes the transition matrix only inter HMMs and give uniform or unigram
-    probabilities of transitions between of each last state and first state """
+    or bigram probabilities of transitions between each last and first state """
     uni = None
     bi = None
     if unibi != None:
         uni, bi, discounts = cPickle.load(unibi)
     for phn1, phone1 in trans[0].iteritems():
+        if phn1 == '!EXIT':                                                                  # TODO remove
+            trans[1][phone1.to_ind[-1]][:] = 0.0 # no trans to anything else                 # TODO remove
+            trans[1][phone1.to_ind[-1]][phone1.to_ind[-1]] = 1.0 # no trans to anything else # TODO remove
+            continue                                                                         # TODO remove
         already_in_prob = trans[1][phone1.to_ind[-1]][phone1.to_ind[-1]]
         to_distribute = (1.0 - already_in_prob) 
-        value = to_distribute / (len(trans[0])) # - 1)
+        value = to_distribute / (len(trans[0]) - 1) # - !ENTER                               # TODO remove
         for phn2, phone2 in trans[0].iteritems():
+            if phn2 == '!ENTER':                                                             # TODO remove
+                trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = 0.0 # no trans to !ENTER     # TODO remove
+                continue                                                                     # TODO remove
             if bi != None: # bigrams
                 if not unigrams_only and phn1 in bi: # we use the full bigrams!
                     if phn2 in bi[phn1]:
@@ -549,7 +556,9 @@ def process(ofname, iscpfname, ihmmfname,
     list_mlf_string = []
     with open(iscpfname) as iscpf:
         il = InnerLoop(gmms_, map_states_to_phones, transitions,
-                using_bigram=(ilmfname != None))
+                using_bigram=(ilmfname != None 
+                    or iwdnetfname != None 
+                    or unibifname != None))
         p = Pool(cpu_count())
         list_mlf_string = p.map(il, iscpf)
     with open(ofname, 'w') as of:
