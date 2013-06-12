@@ -9,14 +9,17 @@ import itertools
 from multiprocessing import Pool, cpu_count
 
 usage = """
-python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM [--u PHONES_COUNTS] 
-        [--p INSERTION_PENALTY] [--s SCALE_FACTOR] [--b INPUT_LM] [--w WDNET]
+python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM  
+        [--p INSERTION_PENALTY] [--s SCALE_FACTOR] 
+        [--b INPUT_LM] [--w WDNET] [--u PHONES_COUNTS] [--ub UNI&BI_LM]
 
-    --u followed by a unigram count dict pickle
+Exclusive uses of these options:
     --b followed by an HTK bigram file (ARPA-MIT LL or matrix bigram, see code)
         /!\ A bigram LM will only work if there are sentences start/end
             (the default symbols are !ENTER/!EXIT)
     --w followed by a wordnet (bigram only)
+    --u followed by a unigram count dict pickle (MARKED FOR DEPRECATION TODO)
+    --ub followed by a pickled bigram file (apply src/produce_LM.py to a MLF)
 """
 
 VERBOSE = False
@@ -204,7 +207,7 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):
                 #line 180 "viterbi.py" (FOR DEBUG)
                 for (int i=1; i < px; ++i) { 
                     for (int j=0; j < py; ++j) {
-                        float max_ = -1000000.0;
+                        float max_ = -100000000000.0;
                         int max_ind = -2;
                         for (int k=0; k < py; ++k) {
                             if (likelihoods(i-1,k) < max_ || log_transitions(k,j) < max_)
@@ -233,7 +236,7 @@ def viterbi(likelihoods, transitions, map_states_to_phones, using_bigram=False):
     except:
         for i in xrange(1, likelihoods.shape[0]):
             for j in xrange(likelihoods.shape[1]):
-                max_ = -1000000.0 # log
+                max_ = -1000000000000.0 # log
                 max_ind = -2
                 for k in nonnulls:
                     #if transitions[1][k][j] == 0.0:
@@ -332,26 +335,40 @@ def parse_wdnet(trans, iwdnf):
     return trans
 
 
-def initialize_transitions(trans, phones_frequencies=None):
+def initialize_transitions(trans, phones_frequencies=None, unibi=None):
     """ takes the transition matrix only inter HMMs and give uniform or unigram
     probabilities of transitions between of each last state and first state """
+    uni = None
+    bi = None
+    if unibi != None:
+        uni, bi, discounts = cPickle.load(unibi)
+    if phones_frequencies != None:
+        uni = phones_freq_from_counts(phones_frequencies)
     for phn1, phone1 in trans[0].iteritems():
         already_in_prob = trans[1][phone1.to_ind[-1]][phone1.to_ind[-1]]
         to_distribute = (1.0 - already_in_prob) 
         value = to_distribute / (len(trans[0])) # - 1)
         for phn2, phone2 in trans[0].iteritems():
-            #if phn2 != phn1:
-            if phones_frequencies != None:
-                value = to_distribute * phones_frequencies[phn2]
+            if bi != None: # bigrams
+                if phn1 in bi:
+                    if phn2 in bi[phn1]:
+                        value = to_distribute * bi[phn1][phn2]
+                    else:
+                        value = to_distribute * discounts[phn1] * uni[phn1]
+                else: # phn1 not in bi means it's _always_ the last phone
+                    value = to_distribute * uni[phn1]
+            elif uni != None: # unigrams
+                value = to_distribute * uni[phn2]
             trans[1][phone1.to_ind[-1]][phone2.to_ind[0]] = value
-        # trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0)
+        #print trans[1][phone1.to_ind[-1]].sum(0)
+        trans[1][phone1.to_ind[-1]] /= trans[1][phone1.to_ind[-1]].sum(0) # we need this because of approximations
         assert(1.0 - epsilon < trans[1][phone1.to_ind[-1]].sum(0) < 1.0 + epsilon) # make sure we normalized our probs
     return trans
 
 
 def penalty_scale(trans, insertion_penalty=0.0, scale_factor=1.0):
     """ 
-     * transforms the transition probabilisties matrix in logs probabilities
+     * transforms the transition probabilities matrix in logs probabilities
      * adds the insertion penalty
      * multiplies the phones transitions by the grammar scale factor
     """
@@ -573,7 +590,7 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
 
 
 def process(ofname, iscpfname, ihmmfname, 
-        iphncountfname=None, ilmfname=None, iwdnetfname=None):
+        iphncountfname=None, ilmfname=None, iwdnetfname=None, unibifname=None):
 
     with open(ihmmfname) as ihmmf:
         n_states, transitions, gmms = parse_hmm(ihmmf)
@@ -591,13 +608,18 @@ def process(ofname, iscpfname, ihmmfname,
                 transitions = parse_lm_matrix(transitions, ilmf) # parse bigram LM in matrix format in ilmf
             else:
                 transitions = parse_lm(transitions, ilmf) # parse bigram LM in ARPA-MIT in ilmf
+    elif unibifname != None:
+        with open(unibifname) as ubf:
+            transitions = initialize_transitions(transitions, None, ubf)
     else:
         phones_frequencies = None
         if iphncountfname != None:
+            # unigram transitions between phones
             with open(iphncountfname) as iphnctf:
-                phones_frequencies = phones_freq_from_counts(iphnctf)
-        # uniform transitions btwn phones
-        transitions = initialize_transitions(transitions, phones_frequencies)
+                transitions = initialize_transitions(transitions, iphnctf)
+        else:
+            # uniform transitions between phones
+            transitions = initialize_transitions(transitions, iphnctf)
     transitions = penalty_scale(transitions, 
             insertion_penalty=INSERTION_PENALTY, scale_factor=SCALE_FACTOR)
 
@@ -623,9 +645,10 @@ if __name__ == "__main__":
             sys.exit(0)
         args = dict(enumerate(sys.argv))
         options = filter(lambda (ind, x): '--' in x[0:2], enumerate(sys.argv))
-        input_counts_fname = None
-        input_lm_fname = None
-        input_wdnet_fname = None
+        input_counts_fname = None # counts for unigram freq
+        input_unibi_fname = None # my bigram LM
+        input_lm_fname = None # HStats bigram LMs (either matrix of ARPA-MIT)
+        input_wdnet_fname = None # HTK's wdnet (with bigram probas)
         if len(options): # we have options
             for ind, option in options:
                 args.pop(ind)
@@ -637,10 +660,14 @@ if __name__ == "__main__":
                 if option == '--s':
                     SCALE_FACTOR = float(args[ind+1])
                     args.pop(ind+1)
-                if option == '--u':
+                if option == '--u': # TODO deprecate
                     input_counts_fname = args[ind+1]
                     args.pop(ind+1)
                     print "initialize the transitions between phones with the unigram lm", input_counts_fname
+                if option == '--ub':
+                    input_unibi_fname = args[ind+1]
+                    args.pop(ind+1)
+                    print "initialize the transitions between phones with the discounted bigram lm", input_unibi_fname 
                 if option == '--b':
                     input_lm_fname = args[ind+1]
                     args.pop(ind+1)
@@ -656,8 +683,8 @@ if __name__ == "__main__":
         input_scp_fname = args.values()[2]
         input_hmm_fname = args.values()[3]
         process(output_fname, input_scp_fname, 
-                input_hmm_fname, input_counts_fname, 
-                input_lm_fname, input_wdnet_fname)
+                input_hmm_fname, input_counts_fname,
+                input_lm_fname, input_wdnet_fname, input_unibi_fname)
     else:
         print usage
         sys.exit(-1)
