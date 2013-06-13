@@ -197,6 +197,7 @@ test_monophones_bigram_LM:
 	@echo "*** testing the monophone trained model (with a bigram LM) ***"
 	HVite -p 2.5 -s 5.0 -w $(TMP_TRAIN_FOLDER)/wdnetbigram -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
 	#HVite -w $(TMP_TRAIN_FOLDER)/wdnetbigram -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(TMP_TRAIN_FOLDER)/outtrans.mlf -S $(dataset_test_folder)/test.scp -o ST $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones
+	# -n 10 10 for the 10-bests lattice
 	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/outtrans.mlf
 
 
@@ -229,7 +230,7 @@ align:
 	@echo ">>> you need to have trained a (monophone) model with sentences start & end."
 	@# TODO not only monophones
 	@echo ">>> Using: $(input_scp) and $(input_mlf), going to $(output_mlf)"
-	HVite -l $(TMP_TRAIN_FOLDER) -a -m -y lab -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -I $(input_mlf) -S $(input_scp) $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones 
+	HVite -a -f -y lab -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -I $(input_mlf) -S $(input_scp) $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones 
 	# -f if you want the full states alignment, -o C for likelihoods by phone, see p.326 in the HTK book
 
 train_test_monophones:
