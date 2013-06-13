@@ -30,11 +30,9 @@ def extract_from_mlf(mlf):
             line = line.rstrip('\n')
             if len(line) < 1:
                 continue
-            if line[0] == '"':
+            if line[0] == '"': # TODO remove SA
                 if tmp_len_x != 0:
                     print "the file above this one was mismatching x and y lengths", line
-                #if x.shape[0] > 1: # TODO remove
-                #    sys.exit(0)
                 t = htkmfc.open(line.strip('"')[:-3] + 'mfc') # .lab -> .mfc
                 x = np.append(x, t.getall(), axis=0)
                 tmp_len_x = t.getall().shape[0]

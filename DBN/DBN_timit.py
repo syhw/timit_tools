@@ -13,9 +13,13 @@ import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
 
 from logistic_timit import LogisticRegression 
-from timit import load_data
+#from timit import load_data
 from mlp import HiddenLayer
 from rbm import RBM
+from prep_timit import load_data
+
+N_FRAMES = 11 # HAS TO BE AN ODD NUMBER 
+              #(same number before and after center frame)
 
 
 class DBN(object):
@@ -29,8 +33,8 @@ class DBN(object):
     regression layer on top.
     """
 
-    def __init__(self, numpy_rng, theano_rng=None, n_ins=39 * 11,
-                 hidden_layers_sizes=[1024, 1024], n_outs=40):
+    def __init__(self, numpy_rng, theano_rng=None, n_ins=39 * N_FRAMES,
+                 hidden_layers_sizes=[1024, 1024], n_outs=62 * 3):
         """This class is made to support a variable number of layers.
 
         :type numpy_rng: numpy.random.RandomState
@@ -256,9 +260,9 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.1, pretraining_epochs=5, # TODO 100
+def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100
              pretrain_lr=0.01, k=1, training_epochs=10, # TODO 1000
-             dataset='/Users/gabrielsynnaeve/postdoc/htk_mfc/TIMIT', batch_size=10):
+             dataset='/home/gsynnaeve/datasets/TIMIT', batch_size=10):
     """
 
     :type learning_rate: float
@@ -277,10 +281,10 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=5, # TODO 100
     :param batch_size: the size of a minibatch
     """
 
-    datasets = load_data(dataset)
+    datasets = load_data(dataset, nframes=N_FRAMES)
 
     train_set_x, train_set_y = datasets[0]
-    valid_set_x, valid_set_y = datasets[1]
+    valid_set_x, valid_set_y = datasets[1] 
     test_set_x, test_set_y = datasets[2]
 
     # compute number of minibatches for training, validation and testing
@@ -290,9 +294,9 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=5, # TODO 100
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
     # construct the Deep Belief Network
-    dbn = DBN(numpy_rng=numpy_rng, n_ins=39 * 11,
+    dbn = DBN(numpy_rng=numpy_rng, n_ins=39 * N_FRAMES,
               hidden_layers_sizes=[1024, 1024, 1024],
-              n_outs=40)
+              n_outs=62 * 3)
 
     #########################
     # PRETRAINING THE MODEL #

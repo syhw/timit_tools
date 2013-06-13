@@ -46,7 +46,7 @@ import numpy
 import theano
 import theano.tensor as T
 
-from timit import load_data
+from prep_timit import load_data
 
 
 class LogisticRegression(object):
