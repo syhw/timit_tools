@@ -6,6 +6,37 @@ import numpy as np
 N_FRAMES = 11 # 5 before and 5 after the labeled frame
 BORROW = True
 
+def padding(nframes, x, y):
+    # dirty hacky padding
+    ba = (nframes - 1) / 2 # before // after
+    x2 = copy.deepcopy(x)
+    on_x2 = False
+    x_f = np.zeros((x.shape[0], nframes * x.shape[1]), dtype='float32')
+    for i in xrange(x.shape[0]):
+        if y[i] == '!ENTER[2]' and y[i-1] != '!ENTER[2]': # TODO general case
+            on_x2 = not on_x2
+            if on_x2:
+                x2[i - ba:i,:] = 0.0
+            else:
+                x[i - ba:i,:] = 0.0
+        if i+ba < y.shape[0] and '!EXIT' in y[i] and not '!EXIT' in y[i+ba]: # TODO general
+            if on_x2:
+                x2[i+ba:i+2*ba+1,:] = 0.0
+            else:
+                x[i+ba:i+2*ba+1,:] = 0.0
+        if on_x2:
+            x_f[i] = np.pad(x2[max(0, i - ba):i + ba + 1].flatten(),
+                    (max(0, (ba - i) * x.shape[1]), 
+                        max(0, ((i+ba+1) - x.shape[0]) * x.shape[1])),
+                    'constant', constant_values=(0,0))
+        else:
+            x_f[i] = np.pad(x[max(0, i - ba):i + ba + 1].flatten(),
+                    (max(0, (ba - i) * x.shape[1]), 
+                        max(0, ((i+ba+1) - x.shape[0]) * x.shape[1])),
+                    'constant', constant_values=(0,0))
+    return x_f
+
+
 def prep_data(dataset, unit=True, nframes=1):
     try:
         train_x = np.load(dataset + "/aligned_train_xdata.npy")
@@ -14,63 +45,85 @@ def prep_data(dataset, unit=True, nframes=1):
         test_y = np.load(dataset + "/aligned_test_ylabels.npy")
 
     except:
-        print >> sys.stderr, "you nee the .npy python arrays"
+        print >> sys.stderr, "you need the .npy python arrays"
         print >> sys.stderr, dataset + "/aligned_train_xdata.npy"
         print >> sys.stderr, dataset + "/aligned_train_ylabels.npy"
         print >> sys.stderr, dataset + "/aligned_test_xdata.npy"
         print >> sys.stderr, dataset + "/aligned_test_ylabels.npy"
         sys.exit(-1)
 
-    ### Feature values (Xs)
+    ### Putting values on [0-1]
     if unit:
         train_x -= train_x.min() # TODO or do that line by line???
         train_x /= train_x.max()
         test_x -= test_x.min()
         test_x /= test_x.max()
 
-    train_x_f = np.zeros((train_x.shape[0], nframes * train_x.shape[1]), dtype='float32')
-    ba = (nframes - 1) / 2 # before / after
-    for i in xrange(train_x.shape[0]):
-        train_x_f[i] = np.pad(train_x[max(0, i - ba):i + ba + 1].flatten(),
-                (max(0, (ba - i) * train_x.shape[1]), 
-                    max(0, ((i+ba+1) - train_x.shape[0]) * train_x.shape[1])),
-                'constant', constant_values=(0,0))
-
-    test_x_f = np.zeros((test_x.shape[0], nframes * test_x.shape[1]), dtype='float32')
-    for i in xrange(test_x.shape[0]):
-        test_x_f[i] = np.pad(test_x[max(0, i - ba):i + ba + 1].flatten(),
-                (max(0, (ba - i) * test_x.shape[1]), 
-                    max(0, ((i+ba+1) - test_x.shape[0]) * test_x.shape[1])),
-                'constant', constant_values=(0,0))
+    ### Feature values (Xs)
+    print "preparing / padding Xs"
+    train_x_f = padding(nframes, train_x, train_y)
+    test_x_f = padding(nframes, test_x, test_y)
 
     ### Labels (Ys)
     from collections import Counter
     c = Counter(train_y)
     to_int = dict([(k, c.keys().index(k)) for k in c.iterkeys()])
     to_state = dict([(c.keys().index(k), k) for k in c.iterkeys()])
-    cPickle.dump('to_int_and_to_state_dicts_tuple.pickle', (to_int, to_state))
+    with open('to_int_and_to_state_dicts_tuple.pickle', 'w') as f:
+        cPickle.dump((to_int, to_state), f)
 
-    train_y_f = np.zeros((train_y.shape[1], 1), dtype='int32')
+    print "preparing / int mapping Ys"
+    train_y_f = np.zeros(train_y.shape[0], dtype='int32')
     for i, e in enumerate(train_y):
         train_y_f[i] = to_int[e]
 
-    test_y_f = np.zeros((test_y.shape[1], 1), dtype='int32')
+    test_y_f = np.zeros(test_y.shape[0], dtype='int32')
     for i, e in enumerate(test_y):
         test_y_f[i] = to_int[e]
+
+    ### Training a SVM to compare results TODO
+    #print "training a SVM" TODO
+
+    ### Training a linear model (elasticnet) to compare results
+    print "training a linear model with SGD"
+    from sklearn import linear_model
+    from sklearn.cross_validation import cross_val_score
+    clf = linear_model.SGDClassifier(loss='modified_huber', penalty='elasticnet') # TODO change and CV params
+    clf.fit(train_x, train_y_f)
+    scores = cross_val_score(clf, test_x, test_y_f)
+    print "score linear classifier (elasticnet, SGD trained)", scores.mean()
+    with open('linear_elasticnet_classif.pickle', 'w') as f:
+        cPickle.dump(clf, f)
+
+    ### Training a random forest to compare results
+    print "training a random forest"
+    from sklearn.ensemble import RandomForestClassifier
+    clf2 = RandomForestClassifier(n_jobs=-1, max_depth=None, min_samples_split=3) # TODO change and CV params
+    clf2.fit(train_x, train_y_f)
+    scores2 = cross_val_score(clf2, test_x, test_y_f)
+    print "score random forest", scores2.mean()
+    with open('random_forest_classif.pickle', 'w') as f:
+        cPickle.dump(clf2, f)
 
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
 def load_data(dataset, nframes=N_FRAMES):
     [train_x, train_y, test_x, test_y] = prep_data(dataset, 
             unit=True, nframes=nframes)
+
+    from sklearn import cross_validation
+    X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=0.15, random_state=0) # 15% for validation
     
-    train_set_x = theano.shared(train_x, borrow=BORROW)
-    train_set_y = theano.shared(np.asarray(train_y, dtype=theano.config.floatX),
-            borrow=BORROW)
+    train_set_x = theano.shared(X_train, borrow=BORROW)
+    train_set_y = theano.shared(np.asarray(y_train, dtype=theano.config.floatX), borrow=BORROW)
     train_set_y = T.cast(train_set_y, 'int32')
+    val_set_x = theano.shared(X_validate, borrow=BORROW)
+    val_set_y = theano.shared(np.asarray(y_validate, dtype=theano.config.floatX), borrow=BORROW)
+    val_set_y = T.cast(val_set_y, 'int32')
     test_set_x = theano.shared(test_x, borrow=BORROW)
     test_set_y = theano.shared(np.asarray(test_y, dtype=theano.config.floatX), borrow=BORROW)
     test_set_y = T.cast(test_set_y, 'int32')
     return [(train_set_x, train_set_y), 
-            (copy.deepcopy(test_set_x), copy.deepcopy(test_set_y)),
-            (test_set_x, test_set_y)] # TODO validation dataset != training
+            #(copy.deepcopy(test_set_x), copy.deepcopy(test_set_y)),
+            (val_set_x, val_set_y),
+            (test_set_x, test_set_y)] 

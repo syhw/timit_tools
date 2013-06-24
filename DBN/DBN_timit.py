@@ -260,8 +260,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100
-             pretrain_lr=0.01, k=1, training_epochs=10, # TODO 1000
+def test_DBN(finetune_lr=0.1, pretraining_epochs=42, # TODO 1000
+             pretrain_lr=0.01, k=1, training_epochs=42, # TODO 1000
              dataset='/home/gsynnaeve/datasets/TIMIT', batch_size=10):
     """
 
@@ -281,11 +281,16 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100
     :param batch_size: the size of a minibatch
     """
 
+    print "loading dataset from", dataset
     datasets = load_data(dataset, nframes=N_FRAMES)
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1] 
     test_set_x, test_set_y = datasets[2]
+    print "dataset loaded!"
+    print "train set size", train_set_x.shape[0]
+    print "validation set size", valid_set_x.shape[0]
+    print "test set size", test_set_x.shape[0]
 
     # compute number of minibatches for training, validation and testing
     n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
@@ -295,7 +300,7 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100
     print '... building the model'
     # construct the Deep Belief Network
     dbn = DBN(numpy_rng=numpy_rng, n_ins=39 * N_FRAMES,
-              hidden_layers_sizes=[1024, 1024, 1024],
+              hidden_layers_sizes=[512, 512],
               n_outs=62 * 3)
 
     #########################
@@ -316,7 +321,7 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100
             c = []
             for batch_index in xrange(n_train_batches):
                 c.append(pretraining_fns[i](index=batch_index,
-                                            lr=pretrain_lr))
+                                            lr=pretrain_lr / (1. + 0.5 * batch_index))) # TODO
             print 'Pre-training layer %i, epoch %d, cost ' % (i, epoch),
             print numpy.mean(c)
 
@@ -403,6 +408,8 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
+    with open('dbn_5.pickle', 'w') as f:
+        cPickle.dump(dbn, f)
 
 
 if __name__ == '__main__':
