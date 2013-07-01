@@ -37,7 +37,7 @@ def padding(nframes, x, y):
     return x_f
 
 
-def prep_data(dataset, unit=True, nframes=1):
+def prep_data(dataset, unit=True, nframes=1, normalize=False):
     try:
         train_x = np.load(dataset + "/aligned_train_xdata.npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
@@ -52,12 +52,21 @@ def prep_data(dataset, unit=True, nframes=1):
         print >> sys.stderr, dataset + "/aligned_test_ylabels.npy"
         sys.exit(-1)
 
-    ### Putting values on [0-1]
+    print "train_x shape:", train_x.shape
+
     if unit:
-        train_x -= train_x.min() # TODO or do that line by line???
-        train_x /= train_x.max()
-        test_x -= test_x.min()
-        test_x /= test_x.max()
+        ### Putting values on [0-1]
+        train_x = (train_x - np.min(train_x, 0)) / np.max(train_x, 0)
+        test_x = (test_x - np.min(test_x, 0)) / np.max(test_x, 0)
+        # TODO or do that globally
+        #train_x -= train_x.min()         
+        #train_x /= train_x.max()
+        #test_x -= test_x.min()
+        #test_x /= test_x.max()
+    if normalize:
+        ### Normalizing (0 mean, 1 variance)
+        train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
+        test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
 
     ### Feature values (Xs)
     print "preparing / padding Xs"

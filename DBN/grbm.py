@@ -3,6 +3,10 @@
 Boltzmann Machines (BMs) are a particular form of energy-based model which
 contain hidden variables. Restricted Boltzmann Machines further restrict BMs
 to those without visible-visible and hidden-hidden connections.
+
+this function has been modified by XAVI and me acording to the hints from the website:
+http://metaoptimize.com/qa/questions/12157/problems-with-dbn-for-audio-data
+
 """
 import cPickle
 import gzip
@@ -18,12 +22,11 @@ import os
 from theano.tensor.shared_randomstreams import RandomStreams
 
 from utils import tile_raster_images
-#from logistic_sgd import load_data
-from logistic_timit import load_data
+from logistic_sgd import load_data
 
 
-class RBM(object):
-    """ Restricted Boltzmann Machine (RBM) """
+class GRBM(object):
+    """ Gaussian Restricted Boltzmann Machine (RBM) (not a mcRBM!) """
     def __init__(self, input=None, n_visible=784, n_hidden=500, \
         W=None, hbias=None, vbias=None, numpy_rng=None,
         theano_rng=None):
@@ -101,11 +104,18 @@ class RBM(object):
         self.params = [self.W, self.hbias, self.vbias]
 
     def free_energy(self, v_sample):
-        ''' Function to compute the free energy '''
-        wx_b = T.dot(v_sample, self.W) + self.hbias
-        vbias_term = T.dot(v_sample, self.vbias)
-        hidden_term = T.sum(T.log(1 + T.exp(wx_b)), axis=1)
-        return -hidden_term - vbias_term
+      ''' Function to compute the free energy (XAVI: modified for GRBM)'''
+      ''' version from the web
+      wx_b = T.dot(v_sample, self.W) + self.hbias
+      squared_term_temp = ((v_sample - self.vbias) ** 2.) / (2.)
+      hidden_term = T.sum(T.log(1 + T.exp(wx_b)), axis=1)
+      squared_term = T.sum(squared_term_temp,axis=1)
+      return squared_term-hidden_term
+      '''
+      ''' version from Florian Metze '''
+      sq_term = 0.5 * T.sqr(v_sample - self.vbias).sum(axis = 1)
+      softplus_term = T.nnet.softplus((T.dot(v_sample, self.W) + self.hbias)).sum(axis = 1)
+      return sq_term - softplus_term
 
     def propup(self, vis):
         '''This function propagates the visible units activation upwards to
@@ -117,7 +127,7 @@ class RBM(object):
         down a more stable computational graph (see details in the
         reconstruction cost function)
 
-        '''
+        '''        
         pre_sigmoid_activation = T.dot(vis, self.W) + self.hbias
         return [pre_sigmoid_activation, T.nnet.sigmoid(pre_sigmoid_activation)]
 
@@ -150,17 +160,17 @@ class RBM(object):
         return [pre_sigmoid_activation, T.nnet.sigmoid(pre_sigmoid_activation)]
 
     def sample_v_given_h(self, h0_sample):
-        ''' This function infers state of visible units given hidden units '''
+        ''' This function infers state of visible units given hidden units 
+        (XAVI modified for GRBM)'''
         # compute the activation of the visible given the hidden sample
         pre_sigmoid_v1, v1_mean = self.propdown(h0_sample)
         # get a sample of the visible given their activation
         # Note that theano_rng.binomial returns a symbolic sample of dtype
         # int64 by default. If we want to keep our computations in floatX
         # for the GPU we need to specify to return the dtype floatX
-        v1_sample = self.theano_rng.binomial(size=v1_mean.shape,
-                                             n=1, p=v1_mean,
-                                             dtype=theano.config.floatX)
-        return [pre_sigmoid_v1, v1_mean, v1_sample]
+        v1_sample = self.theano_rng.binomial(size=v1_mean.shape, n=1, p=v1_mean, dtype=theano.config.floatX)
+        #return [pre_sigmoid_v1, v1_mean, v1_sample]
+        return [pre_sigmoid_v1, v1_mean, pre_sigmoid_v1]
 
     def gibbs_hvh(self, h0_sample):
         ''' This function implements one step of Gibbs sampling,
@@ -194,6 +204,7 @@ class RBM(object):
         also an update of the shared variable used to store the persistent
         chain, if one is used.
 
+        modified to return the square error cost
         """
 
         # compute positive phase
@@ -243,8 +254,9 @@ class RBM(object):
             monitoring_cost = self.get_pseudo_likelihood_cost(updates)
         else:
             # reconstruction cross-entropy is a better proxy for CD
-            monitoring_cost = self.get_reconstruction_cost(updates,
-                                                           pre_sigmoid_nvs[-1])
+            # return the square error instead of the cross-entropy
+            monitoring_cost = self.get_reconstruction_cost(updates, pre_sigmoid_nvs[-1])
+            #monitoring_cost = self.get_reconstruction_cost_MSE(updates, pre_sigmoid_nvs[-1])
 
         return monitoring_cost, updates
 
@@ -276,6 +288,12 @@ class RBM(object):
         updates[bit_i_idx] = (bit_i_idx + 1) % self.n_visible
 
         return cost
+
+    # This returns the mean square error
+    # TODO: I am not confident this is correct, as I should compare the input with the input estimation using the model
+    def get_reconstruction_cost_MSE(self, updates, pre_sigmoid_nv):
+      mse = T.sum(T.sqr(self.input - T.log(T.nnet.sigmoid(pre_sigmoid_nv))), axis=1)
+      return mse
 
     def get_reconstruction_cost(self, updates, pre_sigmoid_nv):
         """Approximation to the reconstruction error

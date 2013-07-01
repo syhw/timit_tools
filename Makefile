@@ -182,8 +182,8 @@ bigram_LM:
 	# cp $(dataset_train_folder)/train.mlf $(TMP_TRAIN_FOLDER)/train.mlf
 	HLStats -o -b $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/train.mlf
 	HLStats -b $(TMP_TRAIN_FOLDER)/bigram2 $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/train.mlf
-	#HBuild -n $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnetbigram
-	HBuild -m $(TMP_TRAIN_FOLDER)/bigram2 $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnetbigram
+	HBuild -n $(TMP_TRAIN_FOLDER)/bigram $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnetbigram
+	HBuild -m $(TMP_TRAIN_FOLDER)/bigram2 $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnetbigram2
 
 
 test_monophones:

@@ -19,6 +19,7 @@ Exclusive uses of these options:
             (the default symbols are !ENTER/!EXIT)
     --w followed by a wordnet (bigram only)
     --ub followed by a pickled bigram file (apply src/produce_LM.py to a MLF)
+    --d followed by a pickled DBN file and a pickled tuple of dicts (states map)
 """
 
 VERBOSE = False
@@ -79,7 +80,7 @@ def precompute_det_inv(gmms):
     return ret
 
 
-def compute_likelihoods(mat, gmms_):
+def compute_likelihoods(gmms_, mat):
     """ compute the log-likelihoods of each states i according to the Gaussian 
     mixture in gmms_[i], for each line of mat (input data) """
     ret = np.ndarray((mat.shape[0], len(gmms_)), dtype="float64")
@@ -229,6 +230,13 @@ def viterbi(likelihoods, transitions, map_states_to_phones,
     for i in xrange(likelihoods.shape[0] - 2, -1, -1):
         states.appendleft((backpointers[i][states[0][0]], posteriors[i][backpointers[i][states[0][0]]]))
         #states.appendleft((posteriors[i].argmax(), posteriors[i].max()))
+
+    #import scipy.io
+    #scipy.io.savemat('log_likelihoods.mat', mdict={
+        #'log_likelihoods': likelihoods,
+        #'log_transitions': log_transitions,
+    #    'best_parse_state_logProb_tuple': states})
+    #sys.exit(0)
     return states # posteriors, TODO
 
 
@@ -499,9 +507,9 @@ def parse_hmm(f):
 
 
 class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
-    def __init__(self, gmms_, map_states_to_phones, transitions,
+    def __init__(self, comp_likelihoods, map_states_to_phones, transitions,
             using_bigram=False):
-        self.gmms_ = gmms_
+        self.comp_likelihoods = comp_likelihoods
         self.map_states_to_phones = map_states_to_phones
         self.transitions = transitions
         self.using_bigram = using_bigram
@@ -509,8 +517,7 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
         cline = clean(line)
         if VERBOSE:
             print cline
-        likelihoods = compute_likelihoods(htkmfc.open(cline).getall(), 
-                self.gmms_) # len(gmms_) == n_states
+        likelihoods = self.comp_likelihoods(htkmfc.open(cline).getall())
         s = '"' + cline[:-3] + 'rec"\n' + \
                 string_mlf(self.map_states_to_phones,
                         viterbi(likelihoods, self.transitions, 
@@ -521,7 +528,8 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
 
 
 def process(ofname, iscpfname, ihmmfname, 
-        ilmfname=None, iwdnetfname=None, unibifname=None):
+        ilmfname=None, iwdnetfname=None, unibifname=None, 
+        idbnfname=None, idbndictstuple=None):
 
     with open(ihmmfname) as ihmmf:
         n_states, transitions, gmms = parse_hmm(ihmmf)
@@ -529,6 +537,17 @@ def process(ofname, iscpfname, ihmmfname,
     gmms_ = precompute_det_inv(gmms)
     #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
     map_states_to_phones = phones_mapping(gmms)
+
+    dbn = None
+    dbn_to_int_to_state_tuple = None
+    if idbnfname != None:
+        if idbndictstuple == None:
+            print >> sys.stderr, "We have the DBN", idbndictstuple, "but not the states mapping"
+            sys.exit(-1)
+        with open(idbnfname) as idbnf:
+            dbn = cPickle.load(idbnf)
+        with open(idbndictstuple) as idbndtf:
+            dbn_to_int_to_state_tuple = cPickle.load(idbndtf)
 
     if iwdnetfname != None:
         with open(iwdnetfname) as iwdnf:
@@ -555,7 +574,9 @@ def process(ofname, iscpfname, ihmmfname,
 
     list_mlf_string = []
     with open(iscpfname) as iscpf:
-        il = InnerLoop(gmms_, map_states_to_phones, transitions,
+        likelihoods_computer = functools.partial(compute_likelihoods, gmms_)
+        il = InnerLoop(likelihoods_computer, 
+                map_states_to_phones, transitions,
                 using_bigram=(ilmfname != None 
                     or iwdnetfname != None 
                     or unibifname != None))
@@ -577,6 +598,8 @@ if __name__ == "__main__":
         input_unibi_fname = None # my bigram LM
         input_lm_fname = None # HStats bigram LMs (either matrix of ARPA-MIT)
         input_wdnet_fname = None # HTK's wdnet (with bigram probas)
+        dbn_fname = None # DBN cPickle
+        dbn_dicts_fname = None # DBN to_int and to_states dicts tuple
         if len(options): # we have options
             for ind, option in options:
                 args.pop(ind)
@@ -601,6 +624,13 @@ if __name__ == "__main__":
                     args.pop(ind+1)
                     print "initialize the transitions between phones with the wordnet", input_wdnet_fname
                     print "WILL IGNORE LANGUAGE MODELS!"
+                if option == '--d':
+                    dbn_fname = args[ind+1]
+                    args.pop(ind+1)
+                    print "will use the following DBN to estimate states likelihoods", dbn_fname
+                    dbn_dicts_fname = args[ind+2]
+                    args.pop(ind+2)
+                    print "with the following to_int and to_states mappings", dbn_dicts_fname
         else:
             print "initialize the transitions between phones uniformly"
         output_fname = args.values()[1]
@@ -608,7 +638,8 @@ if __name__ == "__main__":
         input_hmm_fname = args.values()[3]
         process(output_fname, input_scp_fname, 
                 input_hmm_fname, input_lm_fname, 
-                input_wdnet_fname, input_unibi_fname)
+                input_wdnet_fname, input_unibi_fname,
+                dbn_fname, dbn_dicts_fname)
     else:
         print usage
         sys.exit(-1)
