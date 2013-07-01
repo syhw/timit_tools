@@ -16,11 +16,15 @@ from logistic_timit import LogisticRegression
 #from timit import load_data
 from mlp import HiddenLayer
 from rbm import RBM
+from grbm import GRBM
 from prep_timit import load_data
 
-DATASET = '/home/gsynnaeve/datasets/TIMIT'
+#DATASET = '/home/gsynnaeve/datasets/TIMIT'
+DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT' # faster than the above
 N_FRAMES = 11 # HAS TO BE AN ODD NUMBER 
               #(same number before and after center frame)
+LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
+                                             # for the Gaussian RBM
 
 
 class DBN(object):
@@ -118,13 +122,22 @@ class DBN(object):
             self.params.extend(sigmoid_layer.params)
 
             # Construct an RBM that shared weights with this layer
-            rbm_layer = RBM(numpy_rng=numpy_rng,
-                            theano_rng=theano_rng,
-                            input=layer_input,
-                            n_visible=input_size,
-                            n_hidden=hidden_layers_sizes[i],
-                            W=sigmoid_layer.W,
-                            hbias=sigmoid_layer.b)
+            if i == 0:
+                rbm_layer = GRBM(numpy_rng=numpy_rng,
+                                theano_rng=theano_rng,
+                                input=layer_input,
+                                n_visible=input_size,
+                                n_hidden=hidden_layers_sizes[i],
+                                W=sigmoid_layer.W,
+                                hbias=sigmoid_layer.b)
+            else:
+                rbm_layer = RBM(numpy_rng=numpy_rng,
+                                theano_rng=theano_rng,
+                                input=layer_input,
+                                n_visible=input_size,
+                                n_hidden=hidden_layers_sizes[i],
+                                W=sigmoid_layer.W,
+                                hbias=sigmoid_layer.b)
             self.rbm_layers.append(rbm_layer)
 
         # We now need to add a logistic layer on top of the MLP
@@ -261,8 +274,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.1, pretraining_epochs=42, # TODO 1000
-             pretrain_lr=0.01, k=1, training_epochs=42, # TODO 1000
+def test_DBN(finetune_lr=0.05, pretraining_epochs=42, # TODO 100+
+             pretrain_lr=0.01, k=1, training_epochs=42, # TODO 100+
              dataset=DATASET, batch_size=10):
     """
 
@@ -283,7 +296,9 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=42, # TODO 1000
     """
 
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes=N_FRAMES)
+    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True) 
+    # unit=False because we don't want the [0-1] binary RBM projection
+    # normalize=True because we want the data to be 0 centered with 1 variance.
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1] 
@@ -301,7 +316,7 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=42, # TODO 1000
     print '... building the model'
     # construct the Deep Belief Network
     dbn = DBN(numpy_rng=numpy_rng, n_ins=39 * N_FRAMES,
-              hidden_layers_sizes=[512, 512],
+              hidden_layers_sizes=[768, 768, 768],
               n_outs=62 * 3)
 
     #########################
@@ -321,8 +336,10 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=42, # TODO 1000
             # go through the training set
             c = []
             for batch_index in xrange(n_train_batches):
-                c.append(pretraining_fns[i](index=batch_index,
-                                            lr=pretrain_lr / (1. + 0.5 * batch_index))) # TODO
+                tmp_lr = pretrain_lr / (1. + 0.5 * batch_index) # TODO
+                if i == 0:
+                    tmp_lr /= LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN
+                c.append(pretraining_fns[i](index=batch_index, lr=tmp_lr))
             print 'Pre-training layer %i, epoch %d, cost ' % (i, epoch),
             print numpy.mean(c)
 
