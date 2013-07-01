@@ -283,7 +283,7 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=42, # TODO 1000
     """
 
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes=N_FRAMES)
+    datasets = load_data(dataset, nframes=N_FRAMES, unit=True, normalize=False)
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1] 

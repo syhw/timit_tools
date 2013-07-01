@@ -37,7 +37,7 @@ def padding(nframes, x, y):
     return x_f
 
 
-def prep_data(dataset, unit=True, nframes=1, normalize=False):
+def prep_data(dataset, nframes=1, unit=False, normalize=False):
     try:
         train_x = np.load(dataset + "/aligned_train_xdata.npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
@@ -125,9 +125,9 @@ def prep_data(dataset, unit=True, nframes=1, normalize=False):
     print ">>> Serialized all train/test tables"
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
-def load_data(dataset, nframes=N_FRAMES):
+def load_data(dataset, nframes=N_FRAMES, unit=False, normalize=False):
     [train_x, train_y, test_x, test_y] = prep_data(dataset, 
-            unit=True, nframes=nframes)
+            nframes=nframes, unit=False, normalize=False)
 
     from sklearn import cross_validation
     X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=0.15, random_state=0) # 15% for validation

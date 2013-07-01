@@ -13,7 +13,6 @@ import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
 
 from logistic_timit import LogisticRegression 
-#from timit import load_data
 from mlp import HiddenLayer
 from rbm import RBM
 from grbm import GRBM
