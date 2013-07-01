@@ -408,7 +408,7 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=42, # TODO 1000
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    with open('dbn_5.pickle', 'w') as f:
+    with open('dbn_6.pickle', 'w') as f:
         cPickle.dump(dbn, f)
 
 

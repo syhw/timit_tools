@@ -105,6 +105,15 @@ def prep_data(dataset, unit=True, nframes=1):
     with open('random_forest_classif.pickle', 'w') as f:
         cPickle.dump(clf2, f)
 
+    with open('train_x.npy', 'w') as f:
+        np.save(f, train_x_f)
+    with open('train_y.npy', 'w') as f:
+        np.save(f, train_y_f)
+    with open('test_x.npy', 'w') as f:
+        np.save(f, test_x_f)
+    with open('test_y.npy', 'w') as f:
+        np.save(f, test_y_f)
+    print ">>> Serialized all train/test tables"
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
 def load_data(dataset, nframes=N_FRAMES):
