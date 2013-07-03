@@ -46,6 +46,7 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False):
 
     except:
         print >> sys.stderr, "you need the .npy python arrays"
+        print >> sys.stderr, "you can produce them with src/timit_to_numpy.py"
         print >> sys.stderr, dataset + "/aligned_train_xdata.npy"
         print >> sys.stderr, dataset + "/aligned_train_ylabels.npy"
         print >> sys.stderr, dataset + "/aligned_test_xdata.npy"
