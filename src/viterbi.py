@@ -12,6 +12,7 @@ usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM  
         [--p INSERTION_PENALTY] [--s SCALE_FACTOR] 
         [--b INPUT_LM] [--w WDNET] [--ub UNI&BIGRAM_LM]
+        [--d DBN_PICKLED_FILE DBN_TO_INT_TO_STATE_DICTS_TUPLE]
 
 Exclusive uses of these options:
     --b followed by an HTK bigram file (ARPA-MIT LL or matrix bigram, see code)
@@ -582,9 +583,6 @@ def process(ofname, iscpfname, ihmmfname,
     dbn = None
     dbn_to_int_to_state_tuple = None
     if idbnfname != None:
-        if idbndictstuple == None:
-            print >> sys.stderr, "We have the DBN", idbndictstuple, "but not the states mapping"
-            sys.exit(-1)
         with open(idbnfname) as idbnf:
             dbn = cPickle.load(idbnf)
         with open(idbndictstuple) as idbndtf:
@@ -669,13 +667,21 @@ if __name__ == "__main__":
                     print "initialize the transitions between phones with the wordnet", input_wdnet_fname
                     print "WILL IGNORE LANGUAGE MODELS!"
                 if option == '--d':
+                    if not (ind+2) in args:
+                        print >> sys.stderr, "We need the DBN and the states/phones mapping"
+                        print >> sys.stderr, usage
+                        sys.exit(-1)
+                    try:
+                        from DBN_Gaussian_timit import DBN # not Gaussian if no GRBM
+                    except:
+                        print >> sys.stderr, "experimental: TO BE LAUNCHED FROM THE 'DBN/' DIR"
+                        sys.exit(-1)
                     dbn_fname = args[ind+1]
                     args.pop(ind+1)
-                    from DBN_Gaussian_timit import DBN # not Gaussian if no GRBM
                     print "will use the following DBN to estimate states likelihoods", dbn_fname
-                    print "experimental: TO BE LAUNCHED FROM THE 'DBN/' DIR"
                     dbn_dicts_fname = args[ind+2]
                     args.pop(ind+2)
+                    print "and the following to_int / to_state dicts tuple", dbn_dicts_fname
                     print "with the following to_int and to_states mappings", dbn_dicts_fname
         else:
             print "initialize the transitions between phones uniformly"
