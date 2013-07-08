@@ -101,6 +101,46 @@ def compute_likelihoods(gmms_, mat):
     return ret
 
 
+def padding(nframes, x):
+    """ padding with (nframes-1)/2 frames before & after for *.mfc mat x"""
+    ba = (nframes - 1) / 2
+    x_f = np.zeros((x.shape[0], nframes * x.shape[1]), dtype='float32')
+    for i in xrange(x.shape[0]):
+        x_f[i] = np.pad(x[max(0, i-ba):i+ba+1].flatten(),
+                (max(0, (ba-i) * x.shape[1]), max(0, 
+                    ((i+ba+1) - x.shape[0]) * x.shape[1])), 
+                'constant', constant_values=(0,0))
+    return x_f
+
+
+def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
+    """ compute the "likelihoods" of each states i according to the Deep Belief
+    Network (stacked RBMs) in dbn, for each line of mat (input data) """
+    # first normalize or put in the unit ([0-1]) interval
+    # TODO do that only if we did not do that at the full scale of the corpus
+    if normalize:
+        # if the first layer of the DBN is a Gaussian RBM, we need to normalize mat
+        mat = (mat - np.mean(mat, 0)) / np.std(mat, 0)
+    elif unit:
+        # if the first layer of the DBN is a binary RBM, send mat in [0-1] range
+        mat = (mat - np.min(mat, 0)) / np.max(mat, 0)
+    input_n_frames = dbn.rbm_layers[0].n_visible / (62 * 3) # TODO generalize
+    x = mat
+    if input_n_frames > 1:
+        x = padding(input_n_frames, mat)
+
+    ret = np.ndarray((mat.shape[0], 62*3), dtype="float32")
+    # propagating through the deep belief net
+    for i in xrange(x.shape[0]):
+        output = x[i]
+        for j in xrange(dbn.n_layers):
+            activation = (np.dot(output, dbn.params[2*j].eval()) + 
+                    dbn.params[2*j + 1].eval())
+            output = 1. / (1 + np.exp(-activation))
+        ret[i] = output / np.sum(output)
+    return ret
+
+
 def phones_mapping(gmms):
     map_states_to_phones = {}
     i = 0
@@ -537,6 +577,7 @@ def process(ofname, iscpfname, ihmmfname,
     gmms_ = precompute_det_inv(gmms)
     #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
     map_states_to_phones = phones_mapping(gmms)
+    likelihoods_computer = functools.partial(compute_likelihoods, gmms_)
 
     dbn = None
     dbn_to_int_to_state_tuple = None
@@ -548,6 +589,10 @@ def process(ofname, iscpfname, ihmmfname,
             dbn = cPickle.load(idbnf)
         with open(idbndictstuple) as idbndtf:
             dbn_to_int_to_state_tuple = cPickle.load(idbndtf)
+        map_states_to_phones = dbn_to_int_to_state_tuple[1]
+        likelihoods_computer = functools.partial(compute_likelihoods_dbn, dbn)
+        # like that = for GRBM first layer (normalize=True, unit=False)
+        # TODO correct the normalize/unit to work on full test dataset
 
     if iwdnetfname != None:
         with open(iwdnetfname) as iwdnf:
@@ -574,7 +619,6 @@ def process(ofname, iscpfname, ihmmfname,
 
     list_mlf_string = []
     with open(iscpfname) as iscpf:
-        likelihoods_computer = functools.partial(compute_likelihoods, gmms_)
         il = InnerLoop(likelihoods_computer, 
                 map_states_to_phones, transitions,
                 using_bigram=(ilmfname != None 
@@ -627,7 +671,9 @@ if __name__ == "__main__":
                 if option == '--d':
                     dbn_fname = args[ind+1]
                     args.pop(ind+1)
+                    from DBN_Gaussian_timit import DBN # not Gaussian if no GRBM
                     print "will use the following DBN to estimate states likelihoods", dbn_fname
+                    print "experimental: TO BE LAUNCHED FROM THE 'DBN/' DIR"
                     dbn_dicts_fname = args[ind+2]
                     args.pop(ind+2)
                     print "with the following to_int and to_states mappings", dbn_dicts_fname
