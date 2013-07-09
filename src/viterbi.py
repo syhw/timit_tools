@@ -125,7 +125,7 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     elif unit:
         # if the first layer of the DBN is a binary RBM, send mat in [0-1] range
         mat = (mat - np.min(mat, 0)) / np.max(mat, 0)
-    input_n_frames = dbn.rbm_layers[0].n_visible / (62 * 3) # TODO generalize
+    input_n_frames = dbn.rbm_layers[0].n_visible / 39 # TODO generalize
     x = mat
     if input_n_frames > 1:
         x = padding(input_n_frames, mat)
