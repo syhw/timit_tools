@@ -31,6 +31,7 @@ SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
 epsilon = 1E-6 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
+USING_DBN = False # says if the --d option was called
 
 class Phone:
     def __init__(self, phn_id, phn):
@@ -625,8 +626,11 @@ def process(ofname, iscpfname, ihmmfname,
                 using_bigram=(ilmfname != None 
                     or iwdnetfname != None 
                     or unibifname != None))
-        p = Pool(cpu_count())
-        list_mlf_string = p.map(il, iscpf)
+        if not USING_DBN:
+            p = Pool(cpu_count())
+            list_mlf_string = p.map(il, iscpf)
+        else:
+            list_mlf_string = map(il, iscpf) # because of CUDA, 1 thread only
     with open(ofname, 'w') as of:
         of.write('#!MLF!#\n')
         for line in list_mlf_string:
@@ -685,7 +689,7 @@ if __name__ == "__main__":
                     dbn_dicts_fname = args[ind+2]
                     args.pop(ind+2)
                     print "and the following to_int / to_state dicts tuple", dbn_dicts_fname
-                    print "with the following to_int and to_states mappings", dbn_dicts_fname
+                    USING_DBN = True
         else:
             print "initialize the transitions between phones uniformly"
         output_fname = args.values()[1]
