@@ -69,11 +69,14 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False):
         ### Normalizing (0 mean, 1 variance)
         train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
+    train_x_f = train_x
+    test_x_f = test_x
 
     ### Feature values (Xs)
     print "preparing / padding Xs"
-    train_x_f = padding(nframes, train_x, train_y)
-    test_x_f = padding(nframes, test_x, test_y)
+    if nframes > 1:
+        train_x_f = padding(nframes, train_x, train_y)
+        test_x_f = padding(nframes, test_x, test_y)
 
     ### Labels (Ys)
     from collections import Counter
