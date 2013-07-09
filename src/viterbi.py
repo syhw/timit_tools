@@ -135,10 +135,13 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     for i in xrange(x.shape[0]):
         output = x[i]
         for j in xrange(dbn.n_layers):
-            activation = (np.dot(output, dbn.params[2*j].eval()) + 
-                    dbn.params[2*j + 1].eval())
-            output = 1. / (1 + np.exp(-activation))
-        ret[i] = output / np.sum(output)
+            #activation = (np.dot(output, dbn.params[2*j].eval()) +  # T.dot
+            #        dbn.params[2*j + 1].eval())
+            #output = 1. / (1 + np.exp(-activation))
+            pre, output = dbn.rbm_layers[j].propup(output)
+
+        #ret[i] = output / np.sum(output)
+        ret[i] = dbn.logLayer.p_y_given_x(output)
     return ret
 
 
