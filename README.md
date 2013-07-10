@@ -41,4 +41,13 @@ Or, train triphones:
 
 ## Replacing the GMM by DBNs
 
-TODO
+ 1. Do full states forced alignment of the `.mlf` files with `make align`. 
+
+ 2. Train the deep belief networks on it, either using `DBN/DBN_timit.py` or 
+`DBN/DBN_Gaussian_timit.py` (see inside these files for parameters). Save 
+(pickle at the moment) the DBN objects and the states/indices mappings.
+
+ 3. Use the serialized DBN objects and states/indices mappings with 
+`viterbi.py`, just `cd` to `DBN` and do:
+
+    python ../src/viterbi.py output_dbn.mlf /fhgfs/bootphon/scratch/gsynnaeve/TIMIT/test/test.scp ../tmp_train/hmm_final/hmmdefs --d ../dbn_5.pickle ../to_int_and_to_state_dicts_tuple.pickle
