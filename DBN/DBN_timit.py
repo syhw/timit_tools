@@ -18,7 +18,7 @@ from mlp import HiddenLayer
 from rbm import RBM
 from prep_timit import load_data
 
-DATASET = '/home/gsynnaeve/datasets/TIMIT'
+DATASET = '/media/bigdata/TIMIT'
 N_FRAMES = 11 # HAS TO BE AN ODD NUMBER 
               #(same number before and after center frame)
 
@@ -409,7 +409,7 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=42, # TODO 1000
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    with open('dbn_6.pickle', 'w') as f:
+    with open('dbn_1.pickle', 'w') as f:
         cPickle.dump(dbn, f)
 
 

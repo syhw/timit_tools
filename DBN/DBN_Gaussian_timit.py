@@ -19,8 +19,8 @@ from grbm import GRBM
 from prep_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
-DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT' # faster than the above
-N_FRAMES = 11 # HAS TO BE AN ODD NUMBER 
+DATASET = '/media/bigdata/TIMIT'
+N_FRAMES = 1  # HAS TO BE AN ODD NUMBER 
               #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
@@ -273,7 +273,7 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.05, pretraining_epochs=42, # TODO 100+
+def test_DBN(finetune_lr=0.05, pretraining_epochs=69, # TODO 100+
              pretrain_lr=0.01, k=1, training_epochs=42, # TODO 100+
              dataset=DATASET, batch_size=10):
     """
@@ -315,7 +315,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=42, # TODO 100+
     print '... building the model'
     # construct the Deep Belief Network
     dbn = DBN(numpy_rng=numpy_rng, n_ins=39 * N_FRAMES,
-              hidden_layers_sizes=[768, 768, 768],
+              hidden_layers_sizes=[1024, 1024],
               n_outs=62 * 3)
 
     #########################
@@ -425,7 +425,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=42, # TODO 100+
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    with open('dbn_5.pickle', 'w') as f:
+    with open('dbn_Gaussian_1_frame.pickle', 'w') as f:
         cPickle.dump(dbn, f)
 
 
