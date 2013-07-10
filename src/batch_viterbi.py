@@ -130,20 +130,29 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     x = mat
 
     import theano.tensor as T # TODO do the following efficiently
-    ret = np.ndarray((mat.shape[0], 62*3), dtype="float32")
+    from theano import shared, scan
+    ret = shared(np.ndarray((mat.shape[0], 62*3), dtype="float32"))
     # propagating through the deep belief net
-    for i in xrange(x.shape[0]):
-        output = x[i]
-        for j in xrange(dbn.n_layers):
-            #activation = (np.dot(output, dbn.params[2*j].eval()) +  # T.dot
-            #        dbn.params[2*j + 1].eval())
-            #output = 1. / (1 + np.exp(-activation))
-            pre, output = dbn.rbm_layers[j].propup(output)
+    output = x
+    for layer_ind in xrange(dbn.n_layers):
+        ([pre, output], updates) = scan(fn=dbn.rbm_layers[layer_ind].propup,
+                output_info=ret,
+                sequences=output,
+                n_steps=1)
+    ret = output
 
-        #ret[i] = output / np.sum(output)
-        ret[i] = np.log(T.nnet.softmax(T.dot(output, dbn.logLayer.params[0]) + dbn.logLayer.params[1]).eval())
-    print ret
-    return ret
+#    for i in xrange(x.shape[0]):
+#        output = x[i]
+#        for j in xrange(dbn.n_layers):
+#            #activation = (np.dot(output, dbn.params[2*j].eval()) +  # T.dot
+#            #        dbn.params[2*j + 1].eval())
+#            #output = 1. / (1 + np.exp(-activation))
+#            pre, output = dbn.rbm_layers[j].propup(output)
+#
+#        #ret[i] = output / np.sum(output)
+#        ret[i] = np.log(T.nnet.softmax(T.dot(output, dbn.logLayer.params[0]) + dbn.logLayer.params[1]).eval())
+    print ret.eval()
+    return ret.eval()
 
 
 def phones_mapping(gmms):
