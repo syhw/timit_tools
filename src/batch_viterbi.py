@@ -129,7 +129,7 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
         # if the first layer of the DBN is a binary RBM, send mat in [0-1] range
         mat = (mat - np.min(mat, 0)) / np.max(mat, 0)
 
-    import theano.tensor as T # TODO do the following efficiently
+    import theano.tensor as T
     ret = np.ndarray((mat.shape[0], 62*3), dtype="float32")
     from theano import shared#, scan
 #    ret = shared(np.ndarray((mat.shape[0], 62*3), dtype="float32"))
