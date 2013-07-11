@@ -12,7 +12,6 @@ usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM  
         [--p INSERTION_PENALTY] [--s SCALE_FACTOR] 
         [--b INPUT_LM] [--w WDNET] [--ub UNI&BIGRAM_LM]
-        [--d DBN_PICKLED_FILE DBN_TO_INT_TO_STATE_DICTS_TUPLE]
 
 Exclusive uses of these options:
     --b followed by an HTK bigram file (ARPA-MIT LL or matrix bigram, see code)
@@ -20,7 +19,6 @@ Exclusive uses of these options:
             (the default symbols are !ENTER/!EXIT)
     --w followed by a wordnet (bigram only)
     --ub followed by a pickled bigram file (apply src/produce_LM.py to a MLF)
-    --d followed by a pickled DBN file and a pickled tuple of dicts (states map)
 """
 
 VERBOSE = False
@@ -31,7 +29,6 @@ SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
 epsilon = 1E-6 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
-USING_DBN = False # says if the --d option was called
 
 class Phone:
     def __init__(self, phn_id, phn):
@@ -113,37 +110,6 @@ def padding(nframes, x):
                     ((i+ba+1) - x.shape[0]) * x.shape[1])), 
                 'constant', constant_values=(0,0))
     return x_f
-
-
-def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
-    """ compute the "likelihoods" of each states i according to the Deep Belief
-    Network (stacked RBMs) in dbn, for each line of mat (input data) """
-    # first normalize or put in the unit ([0-1]) interval
-    # TODO do that only if we did not do that at the full scale of the corpus
-    if normalize:
-        # if the first layer of the DBN is a Gaussian RBM, we need to normalize mat
-        mat = (mat - np.mean(mat, 0)) / np.std(mat, 0)
-    elif unit:
-        # if the first layer of the DBN is a binary RBM, send mat in [0-1] range
-        mat = (mat - np.min(mat, 0)) / np.max(mat, 0)
-    input_n_frames = dbn.rbm_layers[0].n_visible / 39 # TODO generalize
-    x = mat
-    if input_n_frames > 1:
-        x = padding(input_n_frames, mat)
-
-    ret = np.ndarray((mat.shape[0], 62*3), dtype="float32")
-    # propagating through the deep belief net
-    for i in xrange(x.shape[0]):
-        output = x[i]
-        for j in xrange(dbn.n_layers):
-            #activation = (np.dot(output, dbn.params[2*j].eval()) +  # T.dot
-            #        dbn.params[2*j + 1].eval())
-            #output = 1. / (1 + np.exp(-activation))
-            pre, output = dbn.rbm_layers[j].propup(output)
-
-        #ret[i] = output / np.sum(output)
-        ret[i] = dbn.logLayer.p_y_given_x(output)
-    return ret
 
 
 def phones_mapping(gmms):
@@ -573,8 +539,7 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
 
 
 def process(ofname, iscpfname, ihmmfname, 
-        ilmfname=None, iwdnetfname=None, unibifname=None, 
-        idbnfname=None, idbndictstuple=None):
+        ilmfname=None, iwdnetfname=None, unibifname=None):
 
     with open(ihmmfname) as ihmmf:
         n_states, transitions, gmms = parse_hmm(ihmmf)
@@ -583,18 +548,6 @@ def process(ofname, iscpfname, ihmmfname,
     #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
     map_states_to_phones = phones_mapping(gmms)
     likelihoods_computer = functools.partial(compute_likelihoods, gmms_)
-
-    dbn = None
-    dbn_to_int_to_state_tuple = None
-    if idbnfname != None:
-        with open(idbnfname) as idbnf:
-            dbn = cPickle.load(idbnf)
-        with open(idbndictstuple) as idbndtf:
-            dbn_to_int_to_state_tuple = cPickle.load(idbndtf)
-        map_states_to_phones = dbn_to_int_to_state_tuple[1]
-        likelihoods_computer = functools.partial(compute_likelihoods_dbn, dbn)
-        # like that = for GRBM first layer (normalize=True, unit=False)
-        # TODO correct the normalize/unit to work on full test dataset
 
     if iwdnetfname != None:
         with open(iwdnetfname) as iwdnf:
@@ -626,11 +579,8 @@ def process(ofname, iscpfname, ihmmfname,
                 using_bigram=(ilmfname != None 
                     or iwdnetfname != None 
                     or unibifname != None))
-        if not USING_DBN:
-            p = Pool(cpu_count())
-            list_mlf_string = p.map(il, iscpf)
-        else:
-            list_mlf_string = map(il, iscpf) # because of CUDA, 1 thread only
+        p = Pool(cpu_count())
+        list_mlf_string = p.map(il, iscpf)
     with open(ofname, 'w') as of:
         of.write('#!MLF!#\n')
         for line in list_mlf_string:
@@ -647,8 +597,6 @@ if __name__ == "__main__":
         input_unibi_fname = None # my bigram LM
         input_lm_fname = None # HStats bigram LMs (either matrix of ARPA-MIT)
         input_wdnet_fname = None # HTK's wdnet (with bigram probas)
-        dbn_fname = None # DBN cPickle
-        dbn_dicts_fname = None # DBN to_int and to_states dicts tuple
         if len(options): # we have options
             for ind, option in options:
                 args.pop(ind)
@@ -673,23 +621,6 @@ if __name__ == "__main__":
                     args.pop(ind+1)
                     print "initialize the transitions between phones with the wordnet", input_wdnet_fname
                     print "WILL IGNORE LANGUAGE MODELS!"
-                if option == '--d':
-                    if not (ind+2) in args:
-                        print >> sys.stderr, "We need the DBN and the states/phones mapping"
-                        print >> sys.stderr, usage
-                        sys.exit(-1)
-                    try:
-                        from DBN_Gaussian_timit import DBN # not Gaussian if no GRBM
-                    except:
-                        print >> sys.stderr, "experimental: TO BE LAUNCHED FROM THE 'DBN/' DIR"
-                        sys.exit(-1)
-                    dbn_fname = args[ind+1]
-                    args.pop(ind+1)
-                    print "will use the following DBN to estimate states likelihoods", dbn_fname
-                    dbn_dicts_fname = args[ind+2]
-                    args.pop(ind+2)
-                    print "and the following to_int / to_state dicts tuple", dbn_dicts_fname
-                    USING_DBN = True
         else:
             print "initialize the transitions between phones uniformly"
         output_fname = args.values()[1]
@@ -697,8 +628,7 @@ if __name__ == "__main__":
         input_hmm_fname = args.values()[3]
         process(output_fname, input_scp_fname, 
                 input_hmm_fname, input_lm_fname, 
-                input_wdnet_fname, input_unibi_fname,
-                dbn_fname, dbn_dicts_fname)
+                input_wdnet_fname, input_unibi_fname)
     else:
         print usage
         sys.exit(-1)

@@ -15,6 +15,7 @@ python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM
         [--p INSERTION_PENALTY] [--s SCALE_FACTOR] 
         [--b INPUT_LM] [--w WDNET] [--ub UNI&BIGRAM_LM]
         [--d DBN_PICKLED_FILE DBN_TO_INT_TO_STATE_DICTS_TUPLE]
+        [--verbose]
 
 Exclusive uses of these options:
     --b followed by an HTK bigram file (ARPA-MIT LL or matrix bigram, see code)
@@ -31,7 +32,7 @@ MATRIX_BIGRAM = True # is the bigram file format a matrix? (ARPA-MIT if False)
 THRESHOLD_BIGRAMS = -10.0 # log10 min proba for a bigram to not be backed-off
 SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
-epsilon = 1E-6 # degree of precision for floating (0.0-1.0 probas) operations
+epsilon = 1E-5 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
 
 class Phone:
@@ -86,7 +87,7 @@ def precompute_det_inv(gmms):
 def compute_likelihoods(gmms_, mat):
     """ compute the log-likelihoods of each states i according to the Gaussian 
     mixture in gmms_[i], for each line of mat (input data) """
-    ret = np.ndarray((mat.shape[0], len(gmms_)), dtype="float64")
+    ret = np.ndarray((mat.shape[0], len(gmms_)), dtype="float32")
     ret[:] = 0.0
     for state_id, mixture in enumerate(gmms_):
         pis, mus, inv_sigmas = mixture
@@ -130,18 +131,23 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     x = mat
 
     import theano.tensor as T # TODO do the following efficiently
-    from theano import shared, scan
-    ret = shared(np.ndarray((mat.shape[0], 62*3), dtype="float32"))
+    ret = np.ndarray((mat.shape[0], 62*3), dtype="float32")
+    from theano import shared#, scan
+#    ret = shared(np.ndarray((mat.shape[0], 62*3), dtype="float32"))
     # propagating through the deep belief net
-    output = x
+    output = shared(x)
+    print "evaluating the DBN on all the test input"
     for layer_ind in xrange(dbn.n_layers):
-        ([pre, output], updates) = scan(fn=dbn.rbm_layers[layer_ind].propup,
-                output_info=ret,
-                sequences=output,
-                n_steps=1)
-    ret = output
+        [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
+    ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)
+#        ([pre, output], updates) = scan(fn=dbn.rbm_layers[layer_ind].propup,
+#                output_info=ret,
+#                sequences=output,
+#                n_steps=1)
+#    ret = output
 
 #    for i in xrange(x.shape[0]):
+#        print "frame", i, "on", x.shape[0], "frames total"
 #        output = x[i]
 #        for j in xrange(dbn.n_layers):
 #            #activation = (np.dot(output, dbn.params[2*j].eval()) +  # T.dot
@@ -151,8 +157,7 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
 #
 #        #ret[i] = output / np.sum(output)
 #        ret[i] = np.log(T.nnet.softmax(T.dot(output, dbn.logLayer.params[0]) + dbn.logLayer.params[1]).eval())
-    print ret.eval()
-    return ret.eval()
+    return np.log(ret.eval())
 
 
 def phones_mapping(gmms):
@@ -501,7 +506,7 @@ def parse_hmm(f):
             n_states_tot += int(line.strip().split()[1]) - 2 
             # we remove init/end states: eg. 5 means 3 states once connected
     transitions = ({}, np.ndarray((n_states_tot, n_states_tot), 
-        dtype='float64'))
+        dtype='float32'))
     # transitions = ( t[phn] = Phone,
     #                               | phn1_s1, phn1_s2, phn1_s3, phn2_s1|
     #                     ----------|-----------------------------------|
@@ -534,7 +539,7 @@ def parse_hmm(f):
             if not len(gmms[phn][-1]):
                 gmms[phn][-1].append([1.0])
             gmms[phn][-1][-1].append(np.array(map(float, 
-                clean(l[i+1]).split()), dtype='float64'))
+                clean(l[i+1]).split()), dtype='float32'))
         elif '<TRANSP>' in line:
             n_st = int(clean(line).split()[1]) - 2  # we also remove init/end
             transitions[0][phn] = Phone(phn_id, phn)
@@ -571,13 +576,15 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
         cline = clean(line)
         if VERBOSE:
             print cline
+            print start, end
         start, end = self.likelihoods[1][cline]
-        likelihoods = self.likelihoods[0][start:end]
+        #likelihoods = self.likelihoods[0][start:end]
         s = '"' + cline[:-3] + 'rec"\n' + \
                 string_mlf(self.map_states_to_phones,
-                        viterbi(likelihoods, self.transitions, 
+                        viterbi(self.likelihoods[0][start:end],
+                            self.transitions, 
                             self.map_states_to_phones,
-                            using_bigram=self.using_bigram),
+                            using_bigram=True),#self.using_bigram), # TODO CHANGE
                         phones_only=True) + '.\n'
         return s
 
@@ -590,9 +597,9 @@ def process(ofname, iscpfname, ihmmfname,
         n_states, transitions, gmms = parse_hmm(ihmmf)
 
     gmms_ = precompute_det_inv(gmms)
-    #gmms_ = [gm_st for _, gm in gmms.iteritems() for gm_st in gm]
     map_states_to_phones = phones_mapping(gmms)
     likelihoods_computer = functools.partial(compute_likelihoods, gmms_)
+    gmm_likelihoods_computer = functools.partial(compute_likelihoods, gmms_) #TODO REMOVE
 
     dbn = None
     dbn_to_int_to_state_tuple = None
@@ -601,7 +608,7 @@ def process(ofname, iscpfname, ihmmfname,
             dbn = cPickle.load(idbnf)
         with open(idbndictstuple) as idbndtf:
             dbn_to_int_to_state_tuple = cPickle.load(idbndtf)
-        map_states_to_phones = dbn_to_int_to_state_tuple[1]
+        dbn_phones_to_states = dbn_to_int_to_state_tuple[0]
         likelihoods_computer = functools.partial(compute_likelihoods_dbn, dbn)
         # like that = for GRBM first layer (normalize=True, unit=False)
         # TODO correct the normalize/unit to work on full test dataset
@@ -630,24 +637,59 @@ def process(ofname, iscpfname, ihmmfname,
     dummy = np.ndarray((2,2)) # to force only 1 compile of Viterbi's C
     viterbi(dummy, [None, dummy], {}) # also for this compile's debug purposes
     
-    print "concatenating MFCC files"
-    all_mfcc = np.ndarray((0, 39)) # TODO generalize
     if dbn != None:
-        all_mfcc = np.ndarray((0, dbn.rbm_layers[0].n_visible)) 
-    map_file_to_start_end = {}
-    with open(iscpfname) as iscpf:
-        for line in iscpf:
-            cline = clean(line)
-            start = all_mfcc.shape[0]
-            x = htkmfc.open(cline).getall()
-            if dbn != None:
-                input_n_frames = dbn.rbm_layers[0].n_visible / 39 # TODO generalize
-                if input_n_frames > 1:
-                    x = padding(input_n_frames, x)
-            all_mfcc = np.append(all_mfcc, x, axis=0)
-            map_file_to_start_end[cline] = (start, all_mfcc.shape[0])
+        input_n_frames = dbn.rbm_layers[0].n_visible / 39 # TODO generalize
+        print "this is a DBN with", input_n_frames, "frames on the input layer"
+        mfcc_file_name = 'tmp_mfcc_' + str(int(input_n_frames)) + '.npy'
+        map_mfcc_file_name = 'tmp_map_file_to_start_end_' + str(int(input_n_frames)) + '.pickle'
+        try: # TODO remove?
+            print "loading concat MFCC from pickled file"
+            with open(mfcc_file_name) as concat_mfcc:
+                all_mfcc = np.load(concat_mfcc)
+            with open(map_mfcc_file_name) as map_mfcc:
+                map_file_to_start_end = cPickle.load(map_mfcc)
+        except:
+            print "concatenating MFCC files" # TODO parallelize + use np.concatenate
+            all_mfcc = np.ndarray((0, dbn.rbm_layers[0].n_visible), dtype='float32')
+            map_file_to_start_end = {}
+            with open(iscpfname) as iscpf:
+                for line in iscpf:
+                    cline = clean(line)
+                    start = all_mfcc.shape[0]
+                    x = htkmfc.open(cline).getall()
+                    if input_n_frames > 1:
+                        x = padding(input_n_frames, x)
+                    all_mfcc = np.append(all_mfcc, x, axis=0)
+                    map_file_to_start_end[cline] = (start, all_mfcc.shape[0])
+
+            with open(mfcc_file_name, 'w') as concat_mfcc:
+                np.save(concat_mfcc, all_mfcc)
+            with open(map_mfcc_file_name, 'w') as map_mfcc:
+                cPickle.dump(map_file_to_start_end, map_mfcc)
+    else: # GMM
+        all_mfcc = np.ndarray((0, 39), dtype='float32') # TODO generalize
+
     print "computing likelihoods"
-    likelihoods = (likelihoods_computer(all_mfcc), map_file_to_start_end)
+    if dbn != None: # TODO clean
+        # TODO REMOVE
+        #gmm_likelihoods = gmm_likelihoods_computer(all_mfcc[:, xrange(195,234)])
+        #mean_gmms = np.mean(gmm_likelihoods, 0)
+        #print gmm_likelihoods
+        #print gmm_likelihoods.shape
+
+        tmp_likelihoods = likelihoods_computer(all_mfcc)
+        #mean_dbns = np.mean(tmp_likelihoods, 0)
+        #tmp_likelihoods *= (mean_gmms / mean_dbns)
+        print tmp_likelihoods
+        print tmp_likelihoods.shape
+        columns_remapping = [dbn_phones_to_states[map_states_to_phones[i]] for i in xrange(tmp_likelihoods.shape[1])]
+        print columns_remapping
+        likelihoods = (tmp_likelihoods[:, columns_remapping],
+            map_file_to_start_end)
+        print likelihoods[0]
+        print likelihoods[0].shape
+    else:
+        likelihoods = (likelihoods_computer(all_mfcc), map_file_to_start_end)
 
     print "computing viterbi paths"
     list_mlf_string = []
@@ -717,7 +759,6 @@ if __name__ == "__main__":
                     dbn_dicts_fname = args[ind+2]
                     args.pop(ind+2)
                     print "and the following to_int / to_state dicts tuple", dbn_dicts_fname
-                    print "with the following to_int and to_states mappings", dbn_dicts_fname
         else:
             print "initialize the transitions between phones uniformly"
         output_fname = args.values()[1]
