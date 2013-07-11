@@ -10,8 +10,8 @@ help:
 prepare: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo "*** preparing the dataset for phones recognition ***"
 	@echo "\n>>> produce MFCC from WAV files\n"
-	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
-	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
+	#python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
+	#python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
 	@echo "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
 	python src/timit_to_htk_labels.py $(dataset)/train
 	python src/timit_to_htk_labels.py $(dataset)/test

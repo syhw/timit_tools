@@ -19,8 +19,8 @@ from grbm import GRBM
 from prep_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
-DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT' # faster than the above
-N_FRAMES = 11 # HAS TO BE AN ODD NUMBER 
+DATASET = '/media/bigdata/TIMIT'
+N_FRAMES = 1  # HAS TO BE AN ODD NUMBER 
               #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM

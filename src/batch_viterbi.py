@@ -128,7 +128,6 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     elif unit:
         # if the first layer of the DBN is a binary RBM, send mat in [0-1] range
         mat = (mat - np.min(mat, 0)) / np.max(mat, 0)
-    x = mat
 
     import theano.tensor as T # TODO do the following efficiently
     ret = np.ndarray((mat.shape[0], 62*3), dtype="float32")
@@ -140,23 +139,6 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     for layer_ind in xrange(dbn.n_layers):
         [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
     ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)
-#        ([pre, output], updates) = scan(fn=dbn.rbm_layers[layer_ind].propup,
-#                output_info=ret,
-#                sequences=output,
-#                n_steps=1)
-#    ret = output
-
-#    for i in xrange(x.shape[0]):
-#        print "frame", i, "on", x.shape[0], "frames total"
-#        output = x[i]
-#        for j in xrange(dbn.n_layers):
-#            #activation = (np.dot(output, dbn.params[2*j].eval()) +  # T.dot
-#            #        dbn.params[2*j + 1].eval())
-#            #output = 1. / (1 + np.exp(-activation))
-#            pre, output = dbn.rbm_layers[j].propup(output)
-#
-#        #ret[i] = output / np.sum(output)
-#        ret[i] = np.log(T.nnet.softmax(T.dot(output, dbn.logLayer.params[0]) + dbn.logLayer.params[1]).eval())
     return np.log(ret.eval())
 
 
