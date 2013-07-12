@@ -134,7 +134,7 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     from theano import shared#, scan
 #    ret = shared(np.ndarray((mat.shape[0], 62*3), dtype="float32"))
     # propagating through the deep belief net
-    output = shared(x)
+    output = shared(mat)
     print "evaluating the DBN on all the test input"
     for layer_ind in xrange(dbn.n_layers):
         [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
