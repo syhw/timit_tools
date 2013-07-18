@@ -1,0 +1,96 @@
+iy -> i
+ix -> xi
+aa -> a
+n -> n
+ae -> xq
+eh -> xe
+l -> l
+ax -> xa
+ah
+sil useless
+ch -> xc
+ey -> e
+aw -> 
+ay -> xy
+zh -> xz
+sh -> xs
+er -> xr
+ng -> xg
+r -> r
+t -> t
+oy -> xo
+dh -> xd
+v -> v
+hh -> h
+ow -> o
+jh -> xj
+dx collapse to d?
+th -> xt
+d -> d
+b -> b
+uw -> u
+g -> g
+f -> f
+k -> k
+m -> m
+p -> p
+s -> s
+uh -> xu
+w -> w
+y -> y
+z -> z
+
+
+Allen timit  CMU     IPA    example 
+i     iy     IY      i      beat    
+xi    ih     IH      ɪ      bit     
+e     ey     EY      e      bait
+xe    eh     EH      ɛ      bet
+xq    ae     AE      æ      bat     
+a     aa     AA      ɑ      Bob
+xa    ah     AH      ʌ      but
+c     ao     AO      ɔ      bought  
+o     ow     OW      o      boat
+xu    uh     UH      ʊ      book
+u     uw     UW      u      boot
+NA    ax     NA      ə      about
+NA    ix     NA      ɨ      roses
+xy    ay     AY      aɪ     buy
+xo    oy     OY      ɔɪ     boy
+xw    aw     AW      aʊ     down
+xr    er     ER      ɝ      bird
+p     p      P       p      pet
+t     t      T       t      ten
+k     k      K       k      kit
+f     f      F       f      fat
+xt    th     TH      θ      thing
+s     s      S       s      sat
+xs    sh     SH      ʃ      shut
+xc    ch     CH      ʧ      church
+h     hh     HH      h      hat
+b     b      B       b      bet
+d     d      D       d       debt
+g     g      G       g      get
+v     v      V       v      vat
+xd    dh     DH      ð      that
+z     z      Z       z      zoo
+xz    zh     ZH      ʒ      azure
+xj    jh     JH      ʤ      judge
+y     y      Y       j      you
+m     m      M       m      met
+n     n      N       n      net
+xg    ng     NG      ŋ      sing
+l     l      L       l      let
+r     r      R       r      rent
+w     w      W       w      wit
+xh    hv     NA      ʍ      which
+xh    wh     NA      ʍ      which
+NA    el     NA      l̩      battle
+NA    em     NA      m̩      bottom
+NA    en     NA      n̩      button
+NA    dx     NA      ɾ      butter
+NA    eng    NA      ŋ      ???
+NA    nx     NA      NA     ???
+NA    axr    NA      NA     ???
+NA    ux     NA      NA     ???
+NA    ax-h   NA      NA     ???
