@@ -43,9 +43,14 @@ Or, train triphones:
 
  1. Do full states forced alignment of the `.mlf` files with `make align`. 
 
+ 2. Do a first preparation of the dataset with `src/timit_to_numpy.py` or 
+`src/mocha_timit_to_numpy.py` (depending on the dataset) on the above aligned 
+`.mlf` files.
+
  2. Train the deep belief networks on it, either using `DBN/DBN_timit.py` or 
-`DBN/DBN_Gaussian_timit.py` (see inside these files for parameters). Save 
-(pickle at the moment) the DBN objects and the states/indices mappings.
+`DBN/DBN_Gaussian_timit.py` or `DBN/DBN_Gaussian_mocha_timit.py` (see inside 
+these files for parameters). Save (pickle at the moment) the DBN objects and 
+the states/indices mappings.
 
  3. Use the serialized DBN objects and states/indices mappings with 
 `viterbi.py`, just `cd` to `DBN` and do:
