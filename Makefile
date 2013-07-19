@@ -10,12 +10,29 @@ help:
 prepare: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo "*** preparing the dataset for phones recognition ***"
 	@echo "\n>>> produce MFCC from WAV files\n"
-	#python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
-	#python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
 	@echo "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
 	python src/timit_to_htk_labels.py $(dataset)/train
 	python src/timit_to_htk_labels.py $(dataset)/test
-	@echo "\n>>> subtitles phones (61 down to 39 if not --nosubst) \n"
+	@echo "\n>>> substitute phones (61 down to 39 if not --nosubst) \n"
+	python src/substitute_phones.py $(dataset)/train --sentences --nosubst
+	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
+	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
+	python src/create_phonesMLF_list_labels.py $(dataset)/train
+	python src/create_phonesMLF_list_labels.py $(dataset)/test
+
+
+prepare_mocha: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
+	# see files in src/ and in mocha-timit/ for specifities of MOCHA-TIMIT
+	@echo "*** preparing the dataset for phones recognition ***"
+	@echo "\n>>> produce MFCC from WAV files\n"
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
+	@echo "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
+	python mocha-timit/mocha_timit_to_htk_labels.py $(dataset)/train
+	python mocha-timit/mocha_timit_to_htk_labels.py $(dataset)/test
+	@echo "\n>>> put ENTER and EXIT symbols \n"
 	python src/substitute_phones.py $(dataset)/train --sentences --nosubst
 	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"

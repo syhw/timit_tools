@@ -10,7 +10,8 @@ Mohamed et al., NIPS 2009" and other Hinton's group papers.
 # TODO load the following parameters from wav_config
 SAMPLING_RATE = 16000 # Hz
 MFCC_TIMESTEP = 10 # 10 ms
-N_MFCC_COEFFS = 39 # as in Mohamed et al. / Dahl et al. (Hinton group) papers
+N_MFCC_COEFFS = 39 
+N_EMA_COEFFS = 20 * 3 # number of articulatory coordinates
 
 TEST = True # test numpy serialization
 
@@ -21,7 +22,7 @@ output files are MLF_FILENAME_xdata.npy and MLF_FILENAME_ylabels.npy
 
 
 def extract_from_mlf(mlf):
-    x = np.ndarray((0,N_MFCC_COEFFS), dtype='float32')
+    x = np.ndarray((0, N_MFCC_COEFFS + N_EMA_COEFFS), dtype='float32')
     y = []
     
     with open(mlf) as f:
@@ -30,12 +31,26 @@ def extract_from_mlf(mlf):
             line = line.rstrip('\n')
             if len(line) < 1:
                 continue
-            if line[0] == '"': # TODO remove SA
+            if line[0] == '"': 
                 if tmp_len_x != 0:
                     print "the file above this one was mismatching x and y lengths", line
                 t = htkmfc.open(line.strip('"')[:-3] + 'mfc') # .lab -> .mfc
-                x = np.append(x, t.getall(), axis=0)
-                tmp_len_x = t.getall().shape[0]
+                mfc_file = t.getall()
+                with open(line.strip('"')[:-4] + '_ema.npy') as ema_f: # .lab -> _ema.npy
+                    ema_file = np.load(ema_f)[:,2:]
+                # THE EMA FILE STARTS AFTER "!ENTER" and "breath" # TODO check again
+                ema_file = np.pad(ema_file, 
+                        ((mfc_file.shape[0] - ema_file.shape[0], 0), (0, 0)), 
+                        'constant', constant_values=(0.0, 0.0)) # should we pad with 0? TODO
+                tmp_diff = np.pad(np.diff(ema_file, axis=0),
+                        ((0, 1), (0, 0)),
+                        'constant', constant_values=(0.0, 0.0))
+                tmp_accel = np.pad(np.diff(tmp_diff, axis=0),
+                        ((0, 1), (0, 0)),
+                        'constant', constant_values=(0.0, 0.0))
+                x_file = np.concatenate((mfc_file, ema_file, tmp_diff, tmp_accel), axis=1)
+                x = np.append(x, x_file, axis=0)
+                tmp_len_x = mfc_file.shape[0]
             elif line[0].isdigit():
                 start, end, state = line.split()[:3]
                 start = (int(start)+1)/(MFCC_TIMESTEP * 10000) # htk
@@ -72,4 +87,5 @@ if __name__ == '__main__':
     mlf = sys.argv[1]
     print "Producing a (x, y) dataset file for:", mlf
     print "WARNING: only the first 39 MFCC coefficients will be taken into account"
+    print "WARNING: and then 20 EMA coeffs and their speed and acceleration"
     extract_from_mlf(mlf)
