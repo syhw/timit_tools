@@ -3,7 +3,6 @@ import theano.tensor as T
 import cPickle
 import numpy as np
 
-N_FRAMES = 11 # 5 before and 5 after the labeled frame
 BORROW = True
 USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
@@ -124,30 +123,30 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False):
 
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
-def load_data(dataset, nframes=N_FRAMES, unit=False, normalize=False, cv_frac=0.2):
+def load_data(dataset, nframes=11, unit=False, normalize=False, cv_frac=0.2):
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
                 nframes=nframes, unit=False, normalize=False)
-        with open('train_x_' + str(N_FRAMES) + '.npy', 'w') as f:
+        with open('train_x_' + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_x)
-        with open('train_y_' + str(N_FRAMES) + '.npy', 'w') as f:
+        with open('train_y_' + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_y)
-        with open('test_x_' + str(N_FRAMES) + '.npy', 'w') as f:
+        with open('test_x_' + str(nframes) + '.npy', 'w') as f:
             np.save(f, test_x)
-        with open('test_y_' + str(N_FRAMES) + '.npy', 'w') as f:
+        with open('test_y_' + str(nframes) + '.npy', 'w') as f:
             np.save(f, test_y)
         print ">>> Serialized all train/test tables"
         return [train_x, train_y, test_x, test_y]
 
     if USE_CACHING:
         try: # try to load from serialized filed, bewa
-            with open('train_x_' + str(N_FRAMES) + '.npy') as f:
+            with open('train_x_' + str(nframes) + '.npy') as f:
                 train_x = np.load(f)
-            with open('train_y_' + str(N_FRAMES) + '.npy') as f:
+            with open('train_y_' + str(nframes) + '.npy') as f:
                 train_y = np.load(f)
-            with open('test_x_' + str(N_FRAMES) + '.npy') as f:
+            with open('test_x_' + str(nframes) + '.npy') as f:
                 test_x = np.load(f)
-            with open('test_y_' + str(N_FRAMES) + '.npy') as f:
+            with open('test_y_' + str(nframes) + '.npy') as f:
                 test_y = np.load(f)
         except: # do the whole preparation (normalization / padding)
             [train_x, train_y, test_x, test_y] = prep_and_serialize()
