@@ -16,14 +16,15 @@ from logistic_timit import LogisticRegression
 from mlp import HiddenLayer
 from rbm import RBM
 from grbm import GRBM
-from prep_timit import load_data
+from prep_mocha_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
 DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/MOCHA_TIMIT'
-N_FRAMES = 9  # HAS TO BE AN ODD NUMBER 
+N_FRAMES_MFCC = 9  # HAS TO BE AN ODD NUMBER 
               #(same number before and after center frame)
-LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 96. # we take a lower learning rate
+N_FRAMES_ARTI = 5  # HAS TO BE AN ODD NUMBER
+LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
 
 
@@ -38,8 +39,9 @@ class DBN(object):
     regression layer on top.
     """
 
-    def __init__(self, numpy_rng, theano_rng=None, n_ins=39 * N_FRAMES,
-                 hidden_layers_sizes=[1024, 1024], n_outs=62 * 3):
+    def __init__(self, numpy_rng, theano_rng=None, 
+            n_ins_mfcc=39*N_FRAMES_MFCC, n_ins_arti=60*N_FRAMES_ARTI,
+                 hidden_layers_sizes=[1024, 1024], n_outs=42):
         """This class is made to support a variable number of layers.
 
         :type numpy_rng: numpy.random.RandomState
@@ -72,7 +74,10 @@ class DBN(object):
             theano_rng = RandomStreams(numpy_rng.randint(2 ** 30))
 
         # allocate symbolic variables for the data
-        self.x = T.matrix('x')  # the data is presented as rasterized images
+        #self.x_mfcc = T.fvector('x_mfcc') # TODO
+        #self.x_arti = T.fvector('x_arti') # TODO
+        self.x_mfcc = T.matrix('x_mfcc')
+        self.x_arti = T.matrix('x_arti') 
         self.y = T.ivector('y')  # the labels are presented as 1D vector
                                  # of [int] labels
 
@@ -87,50 +92,50 @@ class DBN(object):
         # MLP.
 
         for i in xrange(self.n_layers):
-            # construct the sigmoidal layer
-
-            # the size of the input is either the number of hidden
-            # units of the layer below or the input size if we are on
-            # the first layer
             if i == 0:
-                input_size = n_ins
-            else:
-                input_size = hidden_layers_sizes[i - 1]
-
-            # the input to this layer is either the activation of the
-            # hidden layer below or the input of the DBN if you are on
-            # the first layer
-            if i == 0:
-                layer_input = self.x
-            else:
-                layer_input = self.sigmoid_layers[-1].output
-
-            sigmoid_layer = HiddenLayer(rng=numpy_rng,
-                                        input=layer_input,
-                                        n_in=input_size,
-                                        n_out=hidden_layers_sizes[i],
-                                        activation=T.nnet.sigmoid)
-
-            # add the layer to our list of layers
-            self.sigmoid_layers.append(sigmoid_layer)
-
-            # its arguably a philosophical question...  but we are
-            # going to only declare that the parameters of the
-            # sigmoid_layers are parameters of the DBN. The visible
-            # biases in the RBM are parameters of those RBMs, but not
-            # of the DBN.
-            self.params.extend(sigmoid_layer.params)
-
-            # Construct an RBM that shared weights with this layer
-            if i == 0:
+                layer_input = self.x_mfcc
+                sigmoid_layer = HiddenLayer(rng=numpy_rng,
+                                            input=layer_input,
+                                            n_in=n_ins_mfcc,
+                                            n_out=hidden_layers_sizes[i],
+                                            activation=T.nnet.sigmoid)
+                self.sigmoid_layers.append(sigmoid_layer)
+                self.params.extend(sigmoid_layer.params)
                 rbm_layer = GRBM(numpy_rng=numpy_rng,
                                 theano_rng=theano_rng,
                                 input=layer_input,
-                                n_visible=input_size,
+                                n_visible=n_ins_mfcc,
                                 n_hidden=hidden_layers_sizes[i],
                                 W=sigmoid_layer.W,
                                 hbias=sigmoid_layer.b)
-            else:
+                self.rbm_layers.append(rbm_layer)
+            elif i == 1:
+                layer_input = self.x_arti
+                sigmoid_layer = HiddenLayer(rng=numpy_rng,
+                                            input=layer_input,
+                                            n_in=n_ins_arti,
+                                            n_out=hidden_layers_sizes[i],
+                                            activation=T.nnet.sigmoid)
+                self.sigmoid_layers.append(sigmoid_layer)
+                self.params.extend(sigmoid_layer.params)
+                rbm_layer = GRBM(numpy_rng=numpy_rng,
+                                theano_rng=theano_rng,
+                                input=layer_input,
+                                n_visible=n_ins_arti,
+                                n_hidden=hidden_layers_sizes[i],
+                                W=sigmoid_layer.W,
+                                hbias=sigmoid_layer.b)
+                self.rbm_layers.append(rbm_layer)
+            elif i == 2:
+                input_size = hidden_layers_sizes[i - 2] + hidden_layers_sizes[i - 1]
+                layer_input = T.concatenate([self.sigmoid_layers[-2].output, self.sigmoid_layers[-1].output], axis=1) # TODO
+                sigmoid_layer = HiddenLayer(rng=numpy_rng,
+                                            input=layer_input,
+                                            n_in=input_size,
+                                            n_out=hidden_layers_sizes[i],
+                                            activation=T.nnet.sigmoid)
+                self.sigmoid_layers.append(sigmoid_layer)
+                self.params.extend(sigmoid_layer.params)
                 rbm_layer = RBM(numpy_rng=numpy_rng,
                                 theano_rng=theano_rng,
                                 input=layer_input,
@@ -138,7 +143,25 @@ class DBN(object):
                                 n_hidden=hidden_layers_sizes[i],
                                 W=sigmoid_layer.W,
                                 hbias=sigmoid_layer.b)
-            self.rbm_layers.append(rbm_layer)
+                self.rbm_layers.append(rbm_layer)
+            else:
+                input_size = hidden_layers_sizes[i - 1]
+                layer_input = self.sigmoid_layers[-1].output
+                sigmoid_layer = HiddenLayer(rng=numpy_rng,
+                                            input=layer_input,
+                                            n_in=input_size,
+                                            n_out=hidden_layers_sizes[i],
+                                            activation=T.nnet.sigmoid)
+                self.sigmoid_layers.append(sigmoid_layer)
+                self.params.extend(sigmoid_layer.params)
+                rbm_layer = RBM(numpy_rng=numpy_rng,
+                                theano_rng=theano_rng,
+                                input=layer_input,
+                                n_visible=input_size,
+                                n_hidden=hidden_layers_sizes[i],
+                                W=sigmoid_layer.W,
+                                hbias=sigmoid_layer.b)
+                self.rbm_layers.append(rbm_layer)
 
         # We now need to add a logistic layer on top of the MLP
         self.logLayer = LogisticRegression(
@@ -197,8 +220,11 @@ class DBN(object):
                             theano.Param(learning_rate, default=0.1)],
                                  outputs=cost,
                                  updates=updates,
-                                 givens={self.x:
-                                    train_set_x[batch_begin:batch_end]})
+                                 givens={self.x_mfcc:
+                                     train_set_x[batch_begin:batch_end, :39*N_FRAMES_MFCC],
+                                     self.x_arti: 
+                                     train_set_x[batch_begin:batch_end, 39*N_FRAMES_MFCC:]
+                                     })
             # append `fn` to the list of functions
             pretrain_fns.append(fn)
 
@@ -246,20 +272,26 @@ class DBN(object):
         train_fn = theano.function(inputs=[index],
               outputs=self.finetune_cost,
               updates=updates,
-              givens={self.x: train_set_x[index * batch_size:
-                                          (index + 1) * batch_size],
+              givens={self.x_mfcc: train_set_x[index * batch_size:
+                                          (index + 1) * batch_size, :39*N_FRAMES_MFCC],
+                      self.x_arti: train_set_x[index * batch_size:
+                                          (index + 1) * batch_size, 39*N_FRAMES_MFCC:],
                       self.y: train_set_y[index * batch_size:
                                           (index + 1) * batch_size]})
 
         test_score_i = theano.function([index], self.errors,
-                 givens={self.x: test_set_x[index * batch_size:
-                                            (index + 1) * batch_size],
+                 givens={self.x_mfcc: test_set_x[index * batch_size:
+                                         (index + 1) * batch_size, :39*N_FRAMES_MFCC],
+                         self.x_arti: test_set_x[index * batch_size:
+                                         (index + 1) * batch_size, 39*N_FRAMES_MFCC:],
                          self.y: test_set_y[index * batch_size:
                                             (index + 1) * batch_size]})
 
         valid_score_i = theano.function([index], self.errors,
-              givens={self.x: valid_set_x[index * batch_size:
-                                          (index + 1) * batch_size],
+              givens={self.x_mfcc: valid_set_x[index * batch_size:
+                                          (index + 1) * batch_size, :39*N_FRAMES_MFCC],
+                      self.x_arti: valid_set_x[index * batch_size:
+                                          (index + 1) * batch_size, 39*N_FRAMES_MFCC:],
                       self.y: valid_set_y[index * batch_size:
                                           (index + 1) * batch_size]})
 
@@ -274,8 +306,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.05, pretraining_epochs=100, # TODO 100+
-             pretrain_lr=0.01, k=1, training_epochs=100, # TODO 100+
+def test_DBN(finetune_lr=0.05, pretraining_epochs=20, # TODO 100+
+             pretrain_lr=0.01, k=1, training_epochs=69, # TODO 100+
              dataset=DATASET, batch_size=10):
     """
 
@@ -296,7 +328,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=100, # TODO 100+
     """
 
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, cv_frac=0.1) 
+    datasets = load_data(dataset, nframes_mfcc=N_FRAMES_MFCC, nframes_arti=N_FRAMES_ARTI, unit=False, normalize=True, cv_frac=0.1) 
     # unit=False because we don't want the [0-1] binary RBM projection
     # normalize=True because we want the data to be 0 centered with 1 variance.
 
@@ -315,8 +347,8 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=100, # TODO 100+
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
     # construct the Deep Belief Network
-    dbn = DBN(numpy_rng=numpy_rng, n_ins=(39 + 20*3) * N_FRAMES, # 39 MFCC + 20 EMA + speed + accel
-              hidden_layers_sizes=[960, 960, 960],
+    dbn = DBN(numpy_rng=numpy_rng, n_ins_mfcc=39*N_FRAMES_MFCC, n_ins_arti=60*N_FRAMES_ARTI,
+              hidden_layers_sizes=[960, 960, 960, 960],
               n_outs=48 * 3) # TODO put these MOCHA-TIMIT phones in TIMIT phones
 
     #########################
@@ -337,7 +369,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=100, # TODO 100+
             c = []
             for batch_index in xrange(n_train_batches):
                 tmp_lr = pretrain_lr / (1. + 0.5 * batch_index) # TODO
-                if i == 0:
+                if i == 0 or i == 1:
                     tmp_lr /= LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN
                 c.append(pretraining_fns[i](index=batch_index, lr=tmp_lr))
             print 'Pre-training layer %i, epoch %d, cost ' % (i, epoch),
@@ -363,7 +395,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=100, # TODO 100+
     patience = 4 * n_train_batches  # look as this many examples regardless
     patience_increase = 2.    # wait this much longer when a new best is
                               # found
-    improvement_threshold = 0.995  # a relative improvement of this much is
+    improvement_threshold = 0.996  # a relative improvement of this much is
                                    # considered significant
     validation_frequency = min(n_train_batches, patience / 2)
                                   # go through this many
@@ -416,6 +448,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=100, # TODO 100+
 
             if patience <= iter:
                 done_looping = True
+                print('exited out of patience')
                 break
 
     end_time = time.clock()
@@ -426,7 +459,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=100, # TODO 100+
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    with open('dbn_Gaussian_gpu.pickle', 'w') as f:
+    with open('dbn_Gaussian_mocha_gpu.pickle', 'w') as f:
         cPickle.dump(dbn, f)
 
 
