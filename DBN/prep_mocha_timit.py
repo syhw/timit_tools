@@ -82,6 +82,9 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False, normalize=Fal
     if nframes_arti > 1:
         train_x_f_arti = padding(nframes_arti, train_x[:, 39:], train_y)
         test_x_f_arti = padding(nframes_arti, test_x[:, 39:], test_y)
+    if nframes_arti == 0:
+        train_x_f_arti = np.ndarray((train_x_f_mfcc.shape[0], 0), dtype='float32')
+        test_x_f_arti = np.ndarray((test_x_f_mfcc.shape[0], 0), dtype='float32')
 
     ### Labels (Ys)
     from collections import Counter
