@@ -126,7 +126,7 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False):
 def load_data(dataset, nframes=11, unit=False, normalize=False, cv_frac=0.2):
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
-                nframes=nframes, unit=False, normalize=False)
+                nframes=nframes, unit=unit, normalize=normalize)
         with open('train_x_' + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_x)
         with open('train_y_' + str(nframes) + '.npy', 'w') as f:
