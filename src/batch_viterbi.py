@@ -134,7 +134,6 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     import theano.tensor as T
     ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
     from theano import shared#, scan
-#    ret = shared(np.ndarray((mat.shape[0], 62*3), dtype="float32"))
     # propagating through the deep belief net
     batch_size = mat.shape[0] / N_BATCHES_DATASET
     out_ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")

@@ -132,19 +132,17 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
         mat = (mat - np.min(mat, 0)) / np.max(mat, 0)
 
     import theano.tensor as T
-    ret = np.ndarray((mat.shape[0], 62*3), dtype="float32")
+    ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
     from theano import shared#, scan
-#    ret = shared(np.ndarray((mat.shape[0], 62*3), dtype="float32"))
     # propagating through the deep belief net
     batch_size = mat.shape[0] / N_BATCHES_DATASET
-    out_ret = np.ndarray((mat.shape[0], 48*3), dtype="float32")
+    out_ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
     for ind in xrange(0, mat.shape[0]+1, batch_size):
         output = shared(mat[ind:ind+batch_size])
-        print "evaluating the DBN on all the test input"
         [pre, out_mfcc] = dbn.rbm_layers[0].propup(output[:, :dbn.rbm_layers[0].n_visible])
         [pre, out_arti] = dbn.rbm_layers[1].propup(output[:, dbn.rbm_layers[0].n_visible:])
         [pre, output] = dbn.rbm_layers[2].propup(T.concatenate([out_mfcc, out_arti], axis=1))
-        #[pre, output] = dbn.rbm_layers[2].propup(T.concatenate([out_mfcc, np.zeros(out_arti.eval().shape, dtype='float32')], axis=1)) # zeroing out the articulatory features, just to try, that's not comparable to training MFCC only
+        #[pre, output] = dbn.rbm_layers[2].propup(T.concatenate([out_mfcc, np.zeros(out_arti.eval().shape, dtype='float32')], axis=1)) # zeroing out the articulatory features, just to try, that's not comparable to training MFCC onle
         for layer_ind in xrange(3, dbn.n_layers):
             [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
         ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)

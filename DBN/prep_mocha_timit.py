@@ -4,7 +4,7 @@ import cPickle
 import numpy as np
 
 BORROW = True
-USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
+USE_CACHING = False # beware if you use RBM / GRBM alternatively, set it to False
 
 def padding(nframes, x, y):
     # dirty hacky padding
