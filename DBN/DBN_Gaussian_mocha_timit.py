@@ -20,12 +20,14 @@ from prep_mocha_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
-DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/MOCHA_TIMIT/only_msak0'
+#DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/MOCHA_TIMIT/only_msak0'
+DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/MOCHA_TIMIT'
 N_FRAMES_MFCC = 11  # HAS TO BE AN ODD NUMBER 
               #(same number before and after center frame)
 N_FRAMES_ARTI = 7  # HAS TO BE AN ODD NUMBER
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
+output_file_name = 'dbn_Gaussian_mocha_PCA_gpu'
 
 
 class DBN(object):
@@ -222,7 +224,7 @@ class DBN(object):
                                  givens={self.x_mfcc:
                                      train_set_x[batch_begin:batch_end, :self.n_ins_mfcc],
                                      self.x_arti: 
-                                     train_set_x[batch_begin:batch_end, self.n_ins_fcc:]
+                                     train_set_x[batch_begin:batch_end, self.n_ins_mfcc:]
                                      })
             # append `fn` to the list of functions
             pretrain_fns.append(fn)
@@ -352,6 +354,8 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=21, # TODO 100+
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
     # construct the Deep Belief Network
+    print 'number of MFCC-related features', n_mfcc 
+    print 'number of articulatory-related features', n_arti
     dbn = DBN(numpy_rng=numpy_rng, n_ins_mfcc=n_mfcc*N_FRAMES_MFCC,
               n_ins_arti=n_arti*N_FRAMES_ARTI,
               hidden_layers_sizes=[960, 960, 960, 960],
@@ -380,6 +384,9 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=21, # TODO 100+
                 c.append(pretraining_fns[i](index=batch_index, lr=tmp_lr))
             print 'Pre-training layer %i, epoch %d, cost ' % (i, epoch),
             print numpy.mean(c)
+        with open(output_file_name + '_layer_' + str(i) + '.pickle', 'w') as f:
+            cPickle.dump(dbn, f)
+        print "dumped a partially pre-trained model"
 
     end_time = time.clock()
     print >> sys.stderr, ('The pretraining code for file ' +
@@ -465,7 +472,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=21, # TODO 100+
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    with open('dbn_Gaussian_mocha_msak0_gpu.pickle', 'w') as f:
+    with open(output_file_name + '.pickle', 'w') as f:
         cPickle.dump(dbn, f)
 
 

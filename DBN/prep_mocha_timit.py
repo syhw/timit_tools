@@ -177,9 +177,9 @@ def load_data(dataset, nframes_mfcc=11, nframes_arti=5,
             with open('test_y_mocha.npy') as f:
                 test_y = np.load(f)
         except: # do the whole preparation (normalization / padding)
-            [train_x, train_y, test_x, test_y] = prep_and_serialize()
+            ([train_x, train_y, test_x, test_y], n_mfcc, n_arti) = prep_and_serialize()
     else:
-        [train_x, train_y, test_x, test_y] = prep_and_serialize()
+        ([train_x, train_y, test_x, test_y], n_mfcc, n_arti) = prep_and_serialize()
 
     from sklearn import cross_validation
     X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=cv_frac, random_state=0)
