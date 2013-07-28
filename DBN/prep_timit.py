@@ -62,18 +62,16 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False)
         ### Putting values on [0-1]
         train_x = (train_x - np.min(train_x, 0)) / np.max(train_x, 0)
         test_x = (test_x - np.min(test_x, 0)) / np.max(test_x, 0)
-        # TODO or do that globally
-        #train_x -= train_x.min()         
-        #train_x /= train_x.max()
-        #test_x -= test_x.min()
-        #test_x /= test_x.max()
+        # TODO or do that globally on all data
     if normalize:
         ### Normalizing (0 mean, 1 variance)
+        # TODO or do that globally on all data
         train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
-    if pca_whiten:
+    if pca_whiten: # TODO change/correct that looking at prep_mocha_timit
+        ### PCA whitening, beware it's sklearn's and thus stays in PCA space
         from sklearn.decomposition import PCA
-        pca = PCA(n_components=20, whiten=True)
+        pca = PCA(n_components='mle', whiten=True)
         train_x = pca.fit_transform(train_x)
         test_x = pca.fit_transform(test_x)
     train_x_f = train_x
