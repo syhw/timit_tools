@@ -275,8 +275,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.005, pretraining_epochs=69, # TODO 100+
-             pretrain_lr=0.001, k=1, training_epochs=69, # TODO 100+
+def test_DBN(finetune_lr=0.05, pretraining_epochs=69, # TODO 100+
+             pretrain_lr=0.01, k=1, training_epochs=69, # TODO 100+
              dataset=DATASET, batch_size=20):
     """
 
@@ -297,74 +297,77 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=69, # TODO 100+
     """
 
     print "loading dataset from", dataset
-#    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, cv_frac=0.0) 
-#    # unit=False because we don't want the [0-1] binary RBM projection
-#    # normalize=True because we want the data to be 0 centered with 1 variance.
-#    train_set_x, train_set_y = datasets[0]
-#    valid_set_x, valid_set_y = datasets[1] 
-#    test_set_x, test_set_y = datasets[2]
-#    print "dataset loaded!"
-#    print "train set size", train_set_x.shape[0]
-#    print "validation set size", valid_set_x.shape[0]
-#    print "test set size", test_set_x.shape[0]
-#
-#    # compute number of minibatches for training, validation and testing
-#    n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
-#
-#    # numpy random generator
-#    numpy_rng = numpy.random.RandomState(123)
-#    print '... building the model'
-#    # construct the Deep Belief Network
-#    dbn = DBN(numpy_rng=numpy_rng, n_ins=39 * N_FRAMES,
-#              hidden_layers_sizes=[960, 960, 960],
-#              n_outs=62 * 3)
-#
-#    #########################
-#    # PRETRAINING THE MODEL #
-#    #########################
-#    print '... getting the pretraining functions'
-#    pretraining_fns = dbn.pretraining_functions(train_set_x=train_set_x,
-#                                                batch_size=batch_size,
-#                                                k=k)
-#
-#    print '... pre-training the model'
-#    start_time = time.clock()
-#    ## Pre-train layer-wise
-#    for i in xrange(dbn.n_layers):
-#        # go through pretraining epochs
-#        for epoch in xrange(pretraining_epochs):
-#            # go through the training set
-#            c = []
-#            for batch_index in xrange(n_train_batches):
-#                tmp_lr = pretrain_lr / (1. + 0.5 * batch_index) # TODO
-#                if i == 0:
-#                    tmp_lr /= LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN
-#                c.append(pretraining_fns[i](index=batch_index, lr=tmp_lr))
-#            print 'Pre-training layer %i, epoch %d, cost ' % (i, epoch),
-#            print numpy.mean(c)
-#        with open(output_file_name + '_layer_' + str(i) + '.pickle', 'w') as f:
-#            cPickle.dump(dbn, f)
-#        print "dumped a partially pre-trained model"
-#
-#    end_time = time.clock()
-#    print >> sys.stderr, ('The pretraining code for file ' +
-#                          os.path.split(__file__)[1] +
-#                          ' ran for %.2fm' % ((end_time - start_time) / 60.))
+    ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.0)
+    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.16) 
+    # unit=False because we don't want the [0-1] binary RBM projection
+    # normalize=True because we want the data to be 0 centered with 1 variance.
+    # pca_whiten=True because we want the data to be decorrelated
+
+    train_set_x, train_set_y = datasets[0]
+    valid_set_x, valid_set_y = datasets[1] 
+    test_set_x, test_set_y = datasets[2]
+    print "dataset loaded!"
+    print "train set size", train_set_x.shape[0]
+    print "validation set size", valid_set_x.shape[0]
+    print "test set size", test_set_x.shape[0]
+
+    # compute number of minibatches for training, validation and testing
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
+
+    # numpy random generator
+    numpy_rng = numpy.random.RandomState(123)
+    print '... building the model'
+    # construct the Deep Belief Network
+    dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1].eval(),
+              hidden_layers_sizes=[960, 960, 960],
+              n_outs=62 * 3)
+
+    #########################
+    # PRETRAINING THE MODEL #
+    #########################
+    print '... getting the pretraining functions'
+    pretraining_fns = dbn.pretraining_functions(train_set_x=train_set_x,
+                                                batch_size=batch_size,
+                                                k=k)
+
+    print '... pre-training the model'
+    start_time = time.clock()
+    ## Pre-train layer-wise
+    for i in xrange(dbn.n_layers):
+        # go through pretraining epochs
+        for epoch in xrange(pretraining_epochs):
+            # go through the training set
+            c = []
+            for batch_index in xrange(n_train_batches):
+                tmp_lr = pretrain_lr / (1. + 0.5 * batch_index) # TODO
+                if i == 0:
+                    tmp_lr /= LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN
+                c.append(pretraining_fns[i](index=batch_index, lr=tmp_lr))
+            print 'Pre-training layer %i, epoch %d, cost ' % (i, epoch),
+            print numpy.mean(c)
+        with open(output_file_name + '_layer_' + str(i) + '.pickle', 'w') as f:
+            cPickle.dump(dbn, f)
+        print "dumped a partially pre-trained model"
+
+    end_time = time.clock()
+    print >> sys.stderr, ('The pretraining code for file ' +
+                          os.path.split(__file__)[1] +
+                          ' ran for %.2fm' % ((end_time - start_time) / 60.))
 
     ########################
     # FINETUNING THE MODEL #
     ########################
-    with open('dbn_Gaussian_gpu_layer_2.pickle') as f:
-        dbn = cPickle.load(f)
+    #with open('dbn_Gaussian_gpu_layer_2.pickle') as f:
+    #    dbn = cPickle.load(f)
 
-    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, cv_frac=0.2) 
-    # unit=False because we don't want the [0-1] binary RBM projection
-    # normalize=True because we want the data to be 0 centered with 1 variance.
-    train_set_x, train_set_y, valid_set_x, valid_set_y, test_set_x, test_set_y = None, None, None, None, None, None
-    train_set_x, train_set_y = datasets[0]
-    valid_set_x, valid_set_y = datasets[1] 
-    test_set_x, test_set_y = datasets[2]
-    n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
+    ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, cv_frac=0.2) 
+    ### unit=False because we don't want the [0-1] binary RBM projection
+    ### normalize=True because we want the data to be 0 centered with 1 variance.
+    ###train_set_x, train_set_y, valid_set_x, valid_set_y, test_set_x, test_set_y = None, None, None, None, None, None
+    ###train_set_x, train_set_y = datasets[0]
+    ###valid_set_x, valid_set_y = datasets[1] 
+    ###test_set_x, test_set_y = datasets[2]
+    ###n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
 
     # get the training, validation and testing function for the model
     print '... getting the finetuning functions'
@@ -381,7 +384,7 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=69, # TODO 100+
                                    # considered significant
     validation_frequency = min(n_train_batches, patience / 2)
                                   # go through this many
-                                  # minibatche before checking the network
+                                  # minibatches before checking the network
                                   # on the validation set; in this case we
                                   # check every epoch
 
