@@ -37,7 +37,24 @@ def padding(nframes, x, y):
     return x_f
 
 
-def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False, normalize=False):
+def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False, 
+              normalize=False, pca_whiten_mfcc=0, pca_whiten_arti=0):
+    """ Prepare the data for DBN learning.
+
+    pca_whiten_mfcc and pca_whiten_arti are directly passed to PCA as:
+
+    n_components : int, None or string
+          Number of components to keep.
+          if n_components is not set all components are kept::
+
+              n_components == min(n_samples, n_features)
+
+          if n_components == 'mle', Minka's MLE is used to guess the dimension
+          if ``0 < n_components < 1``, select the number of components such that
+          the amount of variance that needs to be explained is greater than the
+          percentage specified by n_components
+    """
+
     try:
         train_x = np.load(dataset + "/aligned_train_xdata.npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
@@ -56,17 +73,38 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False, normalize=Fal
 
     print "train_x shape:", train_x.shape
 
+    n_mfcc = 39
+    if pca_whiten_mfcc:
+        ### PCA whitening, beware it's sklearn's and thus stays in PCA space
+        from sklearn.decomposition import PCA
+        pca = PCA(n_components=pca_whiten_mfcc, whiten=True)
+        pca.fit(train_x[:, :n_mfcc])
+        n_mfcc = pca.n_components
+        # and thus here we still never saw test data
+        train_x = np.concatenate([pca.transform(train_x[:, :n_mfcc]),
+                                 train_x[:, n_mfcc:]], axis=1)
+        test_x = np.concatenate([pca.transform(test_x[:, :n_mfcc]),
+                                 test_x[:, n_mfcc:]], axis=1)
+    n_arti = 60
+    if pca_whiten_arti:
+        ### PCA whitening, beware it's sklearn's and thus stays in PCA space
+        from sklearn.decomposition import PCA
+        pca = PCA(n_components=pca_whiten_arti, whiten=True)
+        pca.fit(train_x[:, n_mfcc:])
+        n_arti = pca.n_components
+        # and thus here we still never saw test data
+        train_x = np.concatenate([train_x[:, :n_mfcc],
+                                 pca.transform(train_x[:, n_mfcc:])], axis=1)
+        test_x = np.concatenate([test_x[:, :n_mfcc],
+                                 pca.transform(test_x[:, n_mfcc:])], axis=1)
     if unit:
         ### Putting values on [0-1]
+        # TODO or do that globally on all data
         train_x = (train_x - np.min(train_x, 0)) / np.max(train_x, 0)
         test_x = (test_x - np.min(test_x, 0)) / np.max(test_x, 0)
-        # TODO or do that globally
-        #train_x -= train_x.min()         
-        #train_x /= train_x.max()
-        #test_x -= test_x.min()
-        #test_x /= test_x.max()
     if normalize:
         ### Normalizing (0 mean, 1 variance)
+        # TODO or do that globally on all data
         train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
     train_x_f_mfcc = train_x[:, :39]
@@ -103,15 +141,20 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False, normalize=Fal
     for i, e in enumerate(test_y):
         test_y_f[i] = to_int[e]
 
-    return [np.concatenate([train_x_f_mfcc, train_x_f_arti], axis=1), train_y_f, 
-            np.concatenate([test_x_f_mfcc, test_x_f_arti], axis=1), test_y_f]
+    return ([np.concatenate([train_x_f_mfcc, train_x_f_arti], axis=1), train_y_f, 
+            np.concatenate([test_x_f_mfcc, test_x_f_arti], axis=1), test_y_f],
+            n_mfcc, n_arti)
 
 def load_data(dataset, nframes_mfcc=11, nframes_arti=5, 
-        unit=False, normalize=False, cv_frac=0.2):
+              unit=False, normalize=False, 
+              pca_whiten_mfcc=0, pca_whiten_arti=0, cv_frac=0.2):
     def prep_and_serialize():
-        [train_x, train_y, test_x, test_y] = prep_data(dataset, 
+        ([train_x, train_y, test_x, test_y], n_mfcc, n_arti) = prep_data(
+                dataset, 
                 nframes_mfcc=nframes_mfcc, nframes_arti=nframes_arti,
-                unit=unit, normalize=normalize)
+                unit=unit, normalize=normalize, 
+                pca_whiten_mfcc=pca_whiten_mfcc, 
+                pca_whiten_arti=pca_whiten_arti)
         with open('train_x_mocha.npy', 'w') as f:
             np.save(f, train_x)
         with open('train_y_mocha.npy', 'w') as f:
@@ -121,7 +164,7 @@ def load_data(dataset, nframes_mfcc=11, nframes_arti=5,
         with open('test_y_mocha.npy', 'w') as f:
             np.save(f, test_y)
         print ">>> Serialized all train/test tables"
-        return [train_x, train_y, test_x, test_y]
+        return ([train_x, train_y, test_x, test_y], n_mfcc, n_arti)
 
     if USE_CACHING:
         try: # try to load from serialized filed, bewa
@@ -150,7 +193,7 @@ def load_data(dataset, nframes_mfcc=11, nframes_arti=5,
     test_set_x = theano.shared(test_x, borrow=BORROW)
     test_set_y = theano.shared(np.asarray(test_y, dtype=theano.config.floatX), borrow=BORROW)
     test_set_y = T.cast(test_set_y, 'int32')
-    return [(train_set_x, train_set_y), 
+    return ([(train_set_x, train_set_y), 
             #(copy.deepcopy(test_set_x), copy.deepcopy(test_set_y)),
             (val_set_x, val_set_y),
-            (test_set_x, test_set_y)] 
+            (test_set_x, test_set_y)], n_mfcc, n_arti)

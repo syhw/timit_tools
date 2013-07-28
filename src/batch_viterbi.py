@@ -283,7 +283,7 @@ def viterbi(likelihoods, transitions, map_states_to_phones,
         #'log_transitions': log_transitions,
     #    'best_parse_state_logProb_tuple': states})
     #sys.exit(0)
-    return states # posteriors, TODO
+    return states, posteriors
 
 
 def parse_wdnet(trans, iwdnf):
@@ -571,7 +571,7 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
                         viterbi(self.likelihoods[0][start:end],
                             self.transitions, 
                             self.map_states_to_phones,
-                            using_bigram=True),#self.using_bigram), # TODO CHANGE
+                            using_bigram=True)[0],#self.using_bigram), # TODO CHANGE
                         phones_only=True) + '.\n'
         return s
 
@@ -663,7 +663,6 @@ def process(ofname, iscpfname, ihmmfname,
         #mean_gmms = np.mean(gmm_likelihoods, 0)
         #print gmm_likelihoods
         #print gmm_likelihoods.shape
-
         tmp_likelihoods = likelihoods_computer(all_mfcc)
         #mean_dbns = np.mean(tmp_likelihoods, 0)
         #tmp_likelihoods *= (mean_gmms / mean_dbns)

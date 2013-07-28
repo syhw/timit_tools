@@ -67,6 +67,7 @@ class DBN(object):
         self.rbm_layers = []
         self.params = []
         self.n_layers = len(hidden_layers_sizes)
+        self.n_ins_mfcc = n_ins_mfcc
 
         assert self.n_layers > 0
 
@@ -199,8 +200,6 @@ class DBN(object):
         index = T.lscalar('index')  # index to a minibatch
         learning_rate = T.scalar('lr')  # learning rate to use
 
-        # number of batches
-        n_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
         # begining of a batch, given `index`
         batch_begin = index * batch_size
         # ending of a batch given `index`
@@ -221,9 +220,9 @@ class DBN(object):
                                  outputs=cost,
                                  updates=updates,
                                  givens={self.x_mfcc:
-                                     train_set_x[batch_begin:batch_end, :39*N_FRAMES_MFCC],
+                                     train_set_x[batch_begin:batch_end, :self.n_ins_mfcc],
                                      self.x_arti: 
-                                     train_set_x[batch_begin:batch_end, 39*N_FRAMES_MFCC:]
+                                     train_set_x[batch_begin:batch_end, self.n_ins_fcc:]
                                      })
             # append `fn` to the list of functions
             pretrain_fns.append(fn)
@@ -273,25 +272,25 @@ class DBN(object):
               outputs=self.finetune_cost,
               updates=updates,
               givens={self.x_mfcc: train_set_x[index * batch_size:
-                                          (index + 1) * batch_size, :39*N_FRAMES_MFCC],
+                                          (index + 1) * batch_size, :self.n_ins_mfcc],
                       self.x_arti: train_set_x[index * batch_size:
-                                          (index + 1) * batch_size, 39*N_FRAMES_MFCC:],
+                                          (index + 1) * batch_size, self.n_ins_mfcc:],
                       self.y: train_set_y[index * batch_size:
                                           (index + 1) * batch_size]})
 
         test_score_i = theano.function([index], self.errors,
                  givens={self.x_mfcc: test_set_x[index * batch_size:
-                                         (index + 1) * batch_size, :39*N_FRAMES_MFCC],
+                                         (index + 1) * batch_size, :self.n_ins_mfcc],
                          self.x_arti: test_set_x[index * batch_size:
-                                         (index + 1) * batch_size, 39*N_FRAMES_MFCC:],
+                                         (index + 1) * batch_size, self.n_ins_mfcc:],
                          self.y: test_set_y[index * batch_size:
                                             (index + 1) * batch_size]})
 
         valid_score_i = theano.function([index], self.errors,
               givens={self.x_mfcc: valid_set_x[index * batch_size:
-                                          (index + 1) * batch_size, :39*N_FRAMES_MFCC],
+                                          (index + 1) * batch_size, :self.n_ins_mfcc],
                       self.x_arti: valid_set_x[index * batch_size:
-                                          (index + 1) * batch_size, 39*N_FRAMES_MFCC:],
+                                          (index + 1) * batch_size, self.n_ins_mfcc:],
                       self.y: valid_set_y[index * batch_size:
                                           (index + 1) * batch_size]})
 
@@ -306,8 +305,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.005, pretraining_epochs=40, # TODO 100+
-             pretrain_lr=0.001, k=1, training_epochs=69, # TODO 100+
+def test_DBN(finetune_lr=0.05, pretraining_epochs=21, # TODO 100+
+             pretrain_lr=0.01, k=1, training_epochs=42, # TODO 100+
              dataset=DATASET, batch_size=10):
     """
 
@@ -328,9 +327,15 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=40, # TODO 100+
     """
 
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes_mfcc=N_FRAMES_MFCC, nframes_arti=N_FRAMES_ARTI, unit=False, normalize=True, cv_frac=0.1) 
+    (datasets, n_mfcc, n_arti) = load_data(dataset, 
+                                           nframes_mfcc=N_FRAMES_MFCC,
+                                           nframes_arti=N_FRAMES_ARTI, 
+                                           unit=False, normalize=True, 
+                                           pca_whiten_mfcc=0, 
+                                           pca_whiten_arti='mle', cv_frac=0.1)
     # unit=False because we don't want the [0-1] binary RBM projection
     # normalize=True because we want the data to be 0 centered with 1 variance.
+    # pca_whiten_arti='mle' i.e. use an estimator to determine PCA n_components
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1] 
@@ -347,7 +352,8 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=40, # TODO 100+
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
     # construct the Deep Belief Network
-    dbn = DBN(numpy_rng=numpy_rng, n_ins_mfcc=39*N_FRAMES_MFCC, n_ins_arti=60*N_FRAMES_ARTI,
+    dbn = DBN(numpy_rng=numpy_rng, n_ins_mfcc=n_mfcc*N_FRAMES_MFCC,
+              n_ins_arti=n_arti*N_FRAMES_ARTI,
               hidden_layers_sizes=[960, 960, 960, 960],
               n_outs=48 * 3) # TODO put these MOCHA-TIMIT phones in TIMIT phones
 

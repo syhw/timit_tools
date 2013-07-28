@@ -248,7 +248,7 @@ def viterbi(likelihoods, transitions, map_states_to_phones,
         #'log_transitions': log_transitions,
     #    'best_parse_state_logProb_tuple': states})
     #sys.exit(0)
-    return states # posteriors, TODO
+    return states, posteriors
 
 
 def parse_wdnet(trans, iwdnf):
@@ -533,7 +533,7 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
                 string_mlf(self.map_states_to_phones,
                         viterbi(likelihoods, self.transitions, 
                             self.map_states_to_phones,
-                            using_bigram=self.using_bigram),
+                            using_bigram=self.using_bigram)[0],
                         phones_only=True) + '.\n'
         return s
 

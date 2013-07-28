@@ -38,7 +38,7 @@ def padding(nframes, x, y):
     return x_f
 
 
-def prep_data(dataset, nframes=1, unit=False, normalize=False):
+def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False):
     try:
         train_x = np.load(dataset + "/aligned_train_xdata.npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
@@ -56,20 +56,24 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False):
         sys.exit(-1)
 
     print "train_x shape:", train_x.shape
+    print "test_x shape:", test_x.shape
 
     if unit:
         ### Putting values on [0-1]
         train_x = (train_x - np.min(train_x, 0)) / np.max(train_x, 0)
         test_x = (test_x - np.min(test_x, 0)) / np.max(test_x, 0)
-        # TODO or do that globally
-        #train_x -= train_x.min()         
-        #train_x /= train_x.max()
-        #test_x -= test_x.min()
-        #test_x /= test_x.max()
+        # TODO or do that globally on all data
     if normalize:
         ### Normalizing (0 mean, 1 variance)
+        # TODO or do that globally on all data
         train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
+    if pca_whiten: # TODO change/correct that looking at prep_mocha_timit
+        ### PCA whitening, beware it's sklearn's and thus stays in PCA space
+        from sklearn.decomposition import PCA
+        pca = PCA(n_components='mle', whiten=True)
+        train_x = pca.fit_transform(train_x)
+        test_x = pca.fit_transform(test_x)
     train_x_f = train_x
     test_x_f = test_x
 
@@ -123,10 +127,10 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False):
 
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
-def load_data(dataset, nframes=11, unit=False, normalize=False, cv_frac=0.2):
+def load_data(dataset, nframes=11, unit=False, normalize=False, pca_whiten=False, cv_frac=0.2):
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
-                nframes=nframes, unit=unit, normalize=normalize)
+                nframes=nframes, unit=unit, normalize=normalize, pca_whiten=pca_whiten)
         with open('train_x_' + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_x)
         with open('train_y_' + str(nframes) + '.npy', 'w') as f:
