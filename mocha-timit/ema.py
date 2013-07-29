@@ -127,9 +127,9 @@ if PLOT:
     pl.suptitle('Electromagnetic Articulograph for ' + sys.argv[1]) # verticalalignment='bottom', horizontalalignment='center')
     pl.show()
 
-#with open('/' + '/'.join(sys.argv[1].split('/')[:-1]) + '/ema_columns.pickle', 'w') as f:
-#    cPickle.dump(columns, f)
+with open('/' + '/'.join(sys.argv[1].split('/')[:-1]) + '/ema_columns.pickle', 'w') as f:
+    cPickle.dump(columns, f)
 
-#with open(sys.argv[1].replace('.ema', '_ema.npy'), 'w') as f:
-#    np.save(f, arr)
+with open(sys.argv[1].replace('.ema', '_ema.npy'), 'w') as f:
+    np.save(f, arr)
 
