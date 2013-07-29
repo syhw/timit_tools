@@ -25,7 +25,7 @@ N_FRAMES = 13  # HAS TO BE AN ODD NUMBER
                #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_Gaussian_gpu'
+output_file_name = 'dbn_Gaussian_gpu_k4'
 
 
 class DBN(object):
@@ -275,8 +275,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.05, pretraining_epochs=69, # TODO 100+
-             pretrain_lr=0.01, k=1, training_epochs=69, # TODO 100+
+def test_DBN(finetune_lr=0.005, pretraining_epochs=51, # TODO 100+
+             pretrain_lr=0.01, k=4, training_epochs=100, # TODO 100+
              dataset=DATASET, batch_size=20):
     """
 
@@ -339,7 +339,7 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=69, # TODO 100+
             # go through the training set
             c = []
             for batch_index in xrange(n_train_batches):
-                tmp_lr = pretrain_lr / (1. + 0.5 * batch_index) # TODO
+                tmp_lr = pretrain_lr / (1. + 0.1 * batch_index) # TODO
                 if i == 0:
                     tmp_lr /= LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN
                 c.append(pretraining_fns[i](index=batch_index, lr=tmp_lr))
