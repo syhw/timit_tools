@@ -307,8 +307,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.05, pretraining_epochs=21, # TODO 100+
-             pretrain_lr=0.01, k=1, training_epochs=42, # TODO 100+
+def test_DBN(finetune_lr=0.05, pretraining_epochs=20, # TODO 100+
+             pretrain_lr=0.1, k=1, training_epochs=42, # TODO 100+
              dataset=DATASET, batch_size=10):
     """
 

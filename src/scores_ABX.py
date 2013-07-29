@@ -16,7 +16,8 @@ SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 VERBOSE = True
 epsilon = 1E-5 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-30 # to add for logs
-APPEND_NAME = '_dbn.mat'
+#APPEND_NAME = '_dbn.mat'
+APPEND_NAME = '_grbm.mat'
 
 #scipy.io.savemat('log_likelihoods.mat', mdict={
     #'log_likelihoods': likelihoods,
@@ -70,7 +71,7 @@ if len(sys.argv) == 5:
     with open(sys.argv[4]) as idbndtf:
         dbn_to_int_to_state_tuple = cPickle.load(idbndtf)
     dbn_phones_to_states = dbn_to_int_to_state_tuple[0]
-    likelihoods_computer = functools.partial(compute_likelihoods_dbn, dbn)
+    likelihoods_computer = functools.partial(compute_likelihoods_dbn, dbn, depth=1)
 
 # TODO bigrams
 transitions = initialize_transitions(transitions)
@@ -122,6 +123,7 @@ if dbn != None:
     columns_remapping = [dbn_phones_to_states[map_states_to_phones[i]] for i in xrange(tmp_likelihoods.shape[1])]
     likelihoods = (tmp_likelihoods[:, columns_remapping],
         map_file_to_start_end)
+    #likelihoods = (tmp_likelihoods, map_file_to_start_end)
 else:
     all_mfcc = np.ndarray((0, 39), dtype='float32')
     map_file_to_start_end = {}

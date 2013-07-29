@@ -286,7 +286,7 @@ def viterbi(likelihoods, transitions, map_states_to_phones,
         #'log_transitions': log_transitions,
     #    'best_parse_state_logProb_tuple': states})
     #sys.exit(0)
-    return states # posteriors, TODO
+    return states, posteriors
 
 
 def parse_wdnet(trans, iwdnf):
@@ -630,7 +630,7 @@ def process(ofname, iscpfname, ihmmfname,
     if dbn != None:
         input_n_frames_mfcc = dbn.rbm_layers[0].n_visible / 39 # TODO generalize
         print "this is a DBN with", input_n_frames_mfcc, "MFCC frames"
-        input_n_frames_arti = dbn.rbm_layers[1].n_visible / 60 # TODO generalize
+        input_n_frames_arti = dbn.rbm_layers[1].n_visible / 59 # 60 # TODO generalize
         print "this is a DBN with", input_n_frames_arti, "articulatory frames"
         input_file_name = 'tmp_input_mocha.npy'
         map_input_file_name = 'tmp_map_file_to_start_end_mocha.pickle'
@@ -641,7 +641,7 @@ def process(ofname, iscpfname, ihmmfname,
             with open(map_input_file_name) as map_input:
                 map_file_to_start_end = cPickle.load(map_input)
         except:
-            print "concatenating MFCC files" # TODO parallelize + use np.concatenate
+            print "concatenating MFCC and articulatory files" # TODO parallelize + use np.concatenate
             all_input = np.ndarray((0, dbn.rbm_layers[0].n_visible + dbn.rbm_layers[1].n_visible), dtype='float32')
             map_file_to_start_end = {}
             with open(iscpfname) as iscpf:

@@ -119,9 +119,12 @@ def padding(nframes, x):
     return x_f
 
 
-def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
+def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
     """ compute the log-likelihoods of each states i according to the Deep 
-    Belief Network (stacked RBMs) in dbn, for each line of mat (input data) """
+    Belief Network (stacked RBMs) in dbn, for each line of mat (input data) 
+    
+    depth is the depth of the DBN at which the likelihoods will pop out,
+    if None, the full DBN is used"""
     # first normalize or put in the unit ([0-1]) interval
     # TODO do that only if we did not do that at the full scale of the corpus
     if normalize:
@@ -137,13 +140,21 @@ def compute_likelihoods_dbn(dbn, mat, normalize=True, unit=False):
     # propagating through the deep belief net
     batch_size = mat.shape[0] / N_BATCHES_DATASET
     out_ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
+    max_layer = dbn.n_layers
+    if depth != None:
+        max_layer = min(dbn.n_layers, depth)
+        out_ret = np.ndarray((mat.shape[0], dbn.rbm_layers[max_layer].W.shape[1].eval()), dtype="float32")
+
     for ind in xrange(0, mat.shape[0]+1, batch_size):
         output = shared(mat[ind:ind+batch_size])
         print "evaluating the DBN on all the test input"
-        for layer_ind in xrange(dbn.n_layers):
+        for layer_ind in xrange(max_layer):
             [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
-        ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)
-        out_ret[ind:ind+batch_size] = T.log(ret).eval()
+        if depth == None:
+            ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)
+            out_ret[ind:ind+batch_size] = T.log(ret).eval()
+        else:
+            out_ret[ind:ind+batch_size] = output.eval()
     return out_ret
 
 
