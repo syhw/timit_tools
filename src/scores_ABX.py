@@ -29,7 +29,11 @@ usage = "python scores_ABX.py directory input_hmm [input_dbn dbn_dict]"
 
 class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
     def __init__(self, likelihoods, map_states_to_phones, transitions,
-            using_bigram=False):
+            using_bigram=False, 
+            depth_0_likelihoods=None, depth_1_likelihoods=None):
+        self.likelihoods = likelihoods
+        self.depth_0_likelihoods = depth_0_likelihoods
+        self.depth_1_likelihoods = depth_1_likelihoods
         self.likelihoods = likelihoods
         self.map_states_to_phones = map_states_to_phones
         self.transitions = transitions
@@ -47,8 +51,10 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
     def write_file(self, mfcc_file, start, end, posteriorgrams):
         print "written", mfcc_file
         scipy.io.savemat(mfcc_file[:-4] + APPEND_NAME, mdict={
-            'likelihoods': np.exp(self.likelihoods[0][start:end]),
-            'posteriors': np.exp(posteriorgrams)})
+            'depth_0_likelihoods': self.depth_0_likelihoods[0][start:end],
+            'depth_1_likelihoods': self.depth_1_likelihoods[0][start:end],
+            'likelihoods': self.likelihoods[0][start:end],
+            'posteriors': posteriorgrams})
 
 
 
@@ -62,6 +68,8 @@ with open(sys.argv[2]) as ihmmf:
 gmms_ = precompute_det_inv(gmms)
 map_states_to_phones = phones_mapping(gmms)
 likelihoods_computer = functools.partial(compute_likelihoods, gmms_)
+depth_0_computer = None
+depth_1_computer = None
 
 dbn = None
 if len(sys.argv) == 5:
@@ -71,7 +79,9 @@ if len(sys.argv) == 5:
     with open(sys.argv[4]) as idbndtf:
         dbn_to_int_to_state_tuple = cPickle.load(idbndtf)
     dbn_phones_to_states = dbn_to_int_to_state_tuple[0]
-    likelihoods_computer = functools.partial(compute_likelihoods_dbn, dbn, depth=1)
+    depth_0_computer = functools.partial(compute_likelihoods_dbn, dbn, depth=0)
+    depth_1_computer = functools.partial(compute_likelihoods_dbn, dbn, depth=1)
+    likelihoods_computer = functools.partial(compute_likelihoods_dbn, dbn, depth=None)
 
 # TODO bigrams
 transitions = initialize_transitions(transitions)
@@ -146,9 +156,12 @@ else:
             np.save(concat_mfcc, all_mfcc)
         with open(map_mfcc_file_name, 'w') as map_mfcc:
             cPickle.dump(map_file_to_start_end, map_mfcc)
+    depth_0 = (depth_0_computer(all_mfcc), map_file_to_start_end)
+    depth_1 = (depth_1_computer(all_mfcc), map_file_to_start_end)
     likelihoods = (likelihoods_computer(all_mfcc), map_file_to_start_end)
 
-il = InnerLoop(likelihoods, map_states_to_phones, transitions)
+il = InnerLoop(likelihoods, map_states_to_phones, transitions, 
+        depth_0_likelihoods=depth_0, depth_1_likelihoods=depth_1)
 p = Pool(cpu_count())
 p.map(il, list_of_mfcc_files)
 

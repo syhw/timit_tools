@@ -21,6 +21,8 @@ from utils import tile_raster_images
 #from logistic_sgd import load_data
 from logistic_timit import load_data
 
+L1 = 0.01 # L1 regularization param (set to 0 for no L1 regularization)
+
 
 class RBM(object):
     """ Restricted Boltzmann Machine (RBM) """
@@ -226,8 +228,14 @@ class RBM(object):
         # not that we only need the sample at the end of the chain
         chain_end = nv_samples[-1]
 
+        # regularization
+        L1_cost = L1 * 1./self.W.shape[0] * T.sum(abs(self.W)) # TODO biases ?
+        # TODO see http://webia.lip6.fr/~cord/Publications_files/ECCV2012cord.pdf
+        # and http://arxiv.org/pdf/1008.4988.pdf
+        #L2_sqr = T.sum(param ** 2)
         cost = T.mean(self.free_energy(self.input)) - T.mean(
-            self.free_energy(chain_end))
+            self.free_energy(chain_end)) + L1_cost
+
         # We must not compute the gradient through the gibbs sampling
         gparams = T.grad(cost, self.params, consider_constant=[chain_end])
 

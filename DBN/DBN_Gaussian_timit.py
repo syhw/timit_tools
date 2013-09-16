@@ -11,6 +11,7 @@ import numpy
 import theano
 import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
+from theano import shared
 
 from logistic_timit import LogisticRegression 
 from mlp import HiddenLayer
@@ -21,11 +22,11 @@ from prep_timit import load_data
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
 DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
-N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
+N_FRAMES = 11  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_Gaussian_gpu_k4'
+output_file_name = 'test'
 
 
 class DBN(object):
@@ -190,8 +191,10 @@ class DBN(object):
             # get the cost and the updates list
             # using CD-k here (persisent=None) for training each RBM.
             # TODO: change cost function to reconstruction error
+            #markov_chain = shared(numpy.empty((batch_size, rbm.n_hidden), dtype='float32'), borrow=True)
+            markov_chain = None
             cost, updates = rbm.get_cost_updates(learning_rate,
-                                                 persistent=None, k=k)
+                                                 persistent=markov_chain, k=k)
 
             # compile the theano function
             fn = theano.function(inputs=[index,
@@ -275,9 +278,9 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.005, pretraining_epochs=51, # TODO 100+
-             pretrain_lr=0.01, k=4, training_epochs=100, # TODO 100+
-             dataset=DATASET, batch_size=20):
+def test_DBN(finetune_lr=0.1, pretraining_epochs=24, # TODO 100+
+             pretrain_lr=0.1, k=2, training_epochs=100, # TODO 100+
+             dataset=DATASET, batch_size=16):
     """
 
     :type learning_rate: float
@@ -298,7 +301,7 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=51, # TODO 100+
 
     print "loading dataset from", dataset
     ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.0)
-    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.16) 
+    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=False, cv_frac=0.1) 
     # unit=False because we don't want the [0-1] binary RBM projection
     # normalize=True because we want the data to be 0 centered with 1 variance.
     # pca_whiten=True because we want the data to be decorrelated
@@ -318,6 +321,8 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=51, # TODO 100+
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
     # construct the Deep Belief Network
+    print "train_set_x.shape.eval()", train_set_x.shape.eval()
+    assert(train_set_x.shape[1].eval() == N_FRAMES * 39) # check
     dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1].eval(),
               hidden_layers_sizes=[960, 960, 960],
               n_outs=62 * 3)
@@ -339,7 +344,7 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=51, # TODO 100+
             # go through the training set
             c = []
             for batch_index in xrange(n_train_batches):
-                tmp_lr = pretrain_lr / (1. + 0.1 * batch_index) # TODO
+                tmp_lr = pretrain_lr / (1. + 0.05 * batch_index) # TODO
                 if i == 0:
                     tmp_lr /= LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN
                 c.append(pretraining_fns[i](index=batch_index, lr=tmp_lr))
@@ -361,8 +366,8 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=51, # TODO 100+
     #    dbn = cPickle.load(f)
 
     ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, cv_frac=0.2) 
-    ### unit=False because we don't want the [0-1] binary RBM projection
-    ### normalize=True because we want the data to be 0 centered with 1 variance.
+    ### # unit=False because we don't want the [0-1] binary RBM projection
+    ### # normalize=True because we want the data to be 0 centered with 1 variance.
     ###train_set_x, train_set_y, valid_set_x, valid_set_y, test_set_x, test_set_y = None, None, None, None, None, None
     ###train_set_x, train_set_y = datasets[0]
     ###valid_set_x, valid_set_y = datasets[1] 

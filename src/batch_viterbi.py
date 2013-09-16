@@ -122,7 +122,6 @@ def padding(nframes, x):
 def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
     """ compute the log-likelihoods of each states i according to the Deep 
     Belief Network (stacked RBMs) in dbn, for each line of mat (input data) 
-    
     depth is the depth of the DBN at which the likelihoods will pop out,
     if None, the full DBN is used"""
     # first normalize or put in the unit ([0-1]) interval
@@ -151,6 +150,19 @@ def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
         for layer_ind in xrange(max_layer):
             [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
         if depth == None:
+
+            ### TODO REMOVE
+            print "dbn output shape", output.shape.eval()
+            #print "dbn output", output.eval()
+###            try:
+###                with open('curr_last_rbm_output.npy', 'r') as f:
+###                    tmp = np.load(f)
+###            except:
+###                tmp = np.ndarray(output.shape.eval(), dtype='float32')
+###            with open('curr_last_rbm_output.npy', 'w') as f:
+###                tmp2 = np.concatenate([tmp, output.eval()], axis=0)
+###                np.save(f, tmp2)
+
             ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)
             out_ret[ind:ind+batch_size] = T.log(ret).eval()
         else:
@@ -294,6 +306,20 @@ def viterbi(likelihoods, transitions, map_states_to_phones,
         #'log_transitions': log_transitions,
     #    'best_parse_state_logProb_tuple': states})
     #sys.exit(0)
+
+    ### TODO REMOVE
+###    if transitions[0] != None:
+###        try:
+###            with open('curr_posteriorgrams_output.npy', 'r') as f:
+###                tmp = np.load(f)
+###        except:
+###            tmp = np.ndarray(posteriors.shape, dtype='float32')
+###        with open('curr_posteriorgrams_output.npy', 'w') as f:
+###            print tmp.shape
+###            tmp2 = np.concatenate([tmp, posteriors], axis=0)
+###            print tmp2.shape
+###            np.save(f, tmp2)
+
     return states, posteriors
 
 
@@ -572,11 +598,10 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
         self.using_bigram = using_bigram
     def __call__(self, line):
         cline = clean(line)
+        start, end = self.likelihoods[1][cline]
         if VERBOSE:
             print cline
             print start, end
-        start, end = self.likelihoods[1][cline]
-        #likelihoods = self.likelihoods[0][start:end]
         s = '"' + cline[:-3] + 'rec"\n' + \
                 string_mlf(self.map_states_to_phones,
                         viterbi(self.likelihoods[0][start:end],
@@ -641,7 +666,7 @@ def process(ofname, iscpfname, ihmmfname,
         mfcc_file_name = 'tmp_mfcc_' + str(int(input_n_frames)) + '.npy'
         map_mfcc_file_name = 'tmp_map_file_to_start_end_' + str(int(input_n_frames)) + '.pickle'
         try: # TODO remove?
-            print "loading concat MFCC from pickled file"
+            print "loading concat MFCC from pickled file", mfcc_file_name
             with open(mfcc_file_name) as concat_mfcc:
                 all_mfcc = np.load(concat_mfcc)
             with open(map_mfcc_file_name) as map_mfcc:
@@ -657,6 +682,8 @@ def process(ofname, iscpfname, ihmmfname,
                     x = htkmfc.open(cline).getall()
                     if input_n_frames > 1:
                         x = padding(input_n_frames, x)
+                    print all_mfcc.shape
+                    print x.shape
                     all_mfcc = np.append(all_mfcc, x, axis=0)
                     map_file_to_start_end[cline] = (start, all_mfcc.shape[0])
 
@@ -677,14 +704,19 @@ def process(ofname, iscpfname, ihmmfname,
         tmp_likelihoods = likelihoods_computer(all_mfcc)
         #mean_dbns = np.mean(tmp_likelihoods, 0)
         #tmp_likelihoods *= (mean_gmms / mean_dbns)
-        print tmp_likelihoods
-        print tmp_likelihoods.shape
+        if VERBOSE:
+            print tmp_likelihoods
+            print tmp_likelihoods.shape
         columns_remapping = [dbn_phones_to_states[map_states_to_phones[i]] for i in xrange(tmp_likelihoods.shape[1])]
-        print columns_remapping
+        if VERBOSE:
+            print columns_remapping
         likelihoods = (tmp_likelihoods[:, columns_remapping],
             map_file_to_start_end)
-        print likelihoods[0]
-        print likelihoods[0].shape
+        #if VERBOSE:
+            #print map_file_to_start_end
+            #print len(map_file_to_start_end)
+            #print likelihoods[0]
+            #print likelihoods[0].shape
     else:
         likelihoods = (likelihoods_computer(all_mfcc), map_file_to_start_end)
 
@@ -696,7 +728,7 @@ def process(ofname, iscpfname, ihmmfname,
                 using_bigram=(ilmfname != None 
                     or iwdnetfname != None 
                     or unibifname != None))
-        p = Pool(cpu_count())
+        p = Pool(1)#cpu_count())
         list_mlf_string = p.map(il, iscpf)
     with open(ofname, 'w') as of:
         of.write('#!MLF!#\n')
@@ -719,7 +751,7 @@ if __name__ == "__main__":
         if len(options): # we have options
             for ind, option in options:
                 args.pop(ind)
-                if option == '--verbose':
+                if option == '--v' or option=='--verbose':
                     VERBOSE = True
                 if option == '--p':
                     INSERTION_PENALTY = float(args[ind+1])
