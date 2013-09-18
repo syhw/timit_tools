@@ -41,8 +41,8 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
     def write_file(self, mfcc_file, start, end, posteriorgrams):
         print "written", mfcc_file
         scipy.io.savemat(mfcc_file[:-4] + APPEND_NAME, mdict={
-            'likelihoods': np.exp(self.likelihoods[0][start:end]),
-            'posteriors': np.exp(posteriorgrams)})
+            'likelihoods': self.likelihoods[0][start:end],
+            'posteriors': posteriorgrams})
 
 
 def reconstruct_articulatory_features_likelihoods(dbn, mat, normalize=True, 

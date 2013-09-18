@@ -728,7 +728,8 @@ def process(ofname, iscpfname, ihmmfname,
                 using_bigram=(ilmfname != None 
                     or iwdnetfname != None 
                     or unibifname != None))
-        p = Pool(1)#cpu_count())
+        #p = Pool(1)
+        p = Pool(cpu_count())
         list_mlf_string = p.map(il, iscpf)
     with open(ofname, 'w') as of:
         of.write('#!MLF!#\n')

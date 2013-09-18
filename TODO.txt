@@ -1,0 +1,4 @@
+- remove bug with bigram decoding (trans prob bigrams vs unigrams)
+- normalize properly likelihoods and posteriors for ABX
+- other datasets: MNGU0, USC TIMIT, Switchboard...
+

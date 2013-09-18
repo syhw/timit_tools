@@ -23,7 +23,7 @@ from theano.tensor.shared_randomstreams import RandomStreams
 
 from utils import tile_raster_images
 
-L1 = 0.01 # L1 regularization param (set to 0 for no L1 regularization)
+L1 = 0.00 # L1 regularization param (set to 0 for no L1 regularization)
 
 
 class GRBM(object):
