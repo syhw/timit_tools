@@ -1,4 +1,5 @@
 - remove bug with bigram decoding (trans prob bigrams vs unigrams)
 - normalize properly likelihoods and posteriors for ABX
 - other datasets: MNGU0, USC TIMIT, Switchboard...
+- TODO line 610 in src/batch_viterbi.py
 
