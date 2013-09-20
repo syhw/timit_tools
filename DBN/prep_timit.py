@@ -3,9 +3,9 @@ import theano.tensor as T
 import cPickle
 import numpy as np
 
-BORROW = True
+BORROW = True # True makes it faster with the GPU
 USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
-TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
+TRAIN_CLASSIFIERS = True # train sklearn classifiers to compare the DBN to
 
 def padding(nframes, x, y):
     # dirty hacky padding
@@ -105,7 +105,7 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False)
         #print "training a SVM" TODO
 
         ### Training a linear model (elasticnet) to compare results
-        print "training a linear model with SGD"
+        print("*** training a linear model with SGD ***")
         from sklearn import linear_model
         from sklearn.cross_validation import cross_val_score
         clf = linear_model.SGDClassifier(loss='modified_huber', penalty='elasticnet') # TODO change and CV params
@@ -116,7 +116,7 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False)
             cPickle.dump(clf, f)
 
         ### Training a random forest to compare results
-        print "training a random forest"
+        print("*** training a random forest ***")
         from sklearn.ensemble import RandomForestClassifier
         clf2 = RandomForestClassifier(n_jobs=-1, max_depth=None, min_samples_split=3) # TODO change and CV params
         clf2.fit(train_x, train_y_f)
@@ -124,8 +124,34 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False)
         print "score random forest", scores2.mean()
         with open('random_forest_classif.pickle', 'w') as f:
             cPickle.dump(clf2, f)
+        
+
+        ### Feature selection
+        print("*** feature selection now: ***")
+        print(" - Feature importances for the random forest classifier")
+        print clf2.feature_importances_
+        from sklearn.feature_selection import SelectPercentile, f_classif 
+        # SelectKBest TODO?
+        selector = SelectPercentile(f_classif, percentile=10) # ANOVA
+        selector.fit(train_x, train_y_f)
+        scores = -np.log10(selector.pvalues_)
+        scores /= scores.max()
+        print(" - ANOVA scoring (order of the MFCC)")
+        print scores
+        from sklearn.feature_selection import RFECV
+        from sklearn.lda import LDA
+        print(" - Recursive feature elimination with cross-validation with LDA")
+        lda = LDA()
+        #lda.fit(train_x, train_y_f, store_covariance=True)
+        rfecv = RFECV(estimator=lda, step=1, scoring='accuracy')
+        rfecv.fit(train_x, train_y_f)
+        print("Optimal number of features : %d" % rfecv.n_features_)
+        print("Ranking (order of the MFCC):")
+        print rfecv.ranking_
+        # TODO sample features combinations with LDA? kernels?
 
     return [train_x_f, train_y_f, test_x_f, test_y_f]
+
 
 def load_data(dataset, nframes=11, unit=False, normalize=False, pca_whiten=False, cv_frac=0.2):
     def prep_and_serialize():
