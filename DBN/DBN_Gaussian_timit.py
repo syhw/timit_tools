@@ -26,7 +26,7 @@ N_FRAMES = 11  # HAS TO BE AN ODD NUMBER
                #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_k2_timit'
+output_file_name = 'dbn_k1_timit_yasser'
 
 
 class DBN(object):
@@ -278,8 +278,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.1, pretraining_epochs=20, # TODO 100+
-             pretrain_lr=0.1, k=2, training_epochs=50, # TODO 100+
+def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100+
+             pretrain_lr=0.1, k=1, training_epochs=100, # TODO 100+
              dataset=DATASET, batch_size=20):
     """
 

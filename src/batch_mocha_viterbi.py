@@ -9,6 +9,8 @@ import itertools
 from multiprocessing import Pool, cpu_count
 import os
 sys.path.append(os.getcwd())
+from mocha_timit_to_numpy import from_mfcc_ema_to_mfcc_arti_tuple
+from batch_viterbi import InnerLoop
 
 usage = """
 python viterbi.py OUTPUT[.mlf] INPUT_SCP INPUT_HMM  
@@ -555,30 +557,6 @@ def parse_hmm(f):
     return n_states_tot, transitions, gmms
 
 
-class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
-    def __init__(self, likelihoods, map_states_to_phones, transitions,
-            using_bigram=False):
-        self.likelihoods = likelihoods
-        self.map_states_to_phones = map_states_to_phones
-        self.transitions = transitions
-        self.using_bigram = using_bigram
-    def __call__(self, line):
-        cline = clean(line)
-        if VERBOSE:
-            print cline
-            print start, end
-        start, end = self.likelihoods[1][cline]
-        #likelihoods = self.likelihoods[0][start:end]
-        s = '"' + cline[:-3] + 'rec"\n' + \
-                string_mlf(self.map_states_to_phones,
-                        viterbi(self.likelihoods[0][start:end],
-                            self.transitions, 
-                            self.map_states_to_phones,
-                            using_bigram=True),#self.using_bigram), # TODO CHANGE
-                        phones_only=True) + '.\n'
-        return s
-
-
 def process(ofname, iscpfname, ihmmfname, 
         ilmfname=None, iwdnetfname=None, unibifname=None, 
         idbnfname=None, idbndictstuple=None):
@@ -648,23 +626,22 @@ def process(ofname, iscpfname, ihmmfname,
                 for line in iscpf:
                     cline = clean(line)
                     start = all_input.shape[0]
+                    # get the 1 framed signals
                     x_mfcc = htkmfc.open(cline).getall()
-                    if input_n_frames_mfcc > 1:
-                        x_mfcc = padding(input_n_frames_mfcc, x_mfcc)
                     with open(cline[:-4] + '_ema.npy') as ema:
                         x_arti = np.load(ema)[:, 2:]
-                    x_arti = np.pad(x_arti, ((x_mfcc.shape[0] - x_arti.shape[0], 0), (0, 0)), 'constant', constant_values=(0.0, 0.0))
-                    tmp_diff = np.pad(np.diff(x_arti, axis=0),
-                            ((0, 1), (0, 0)),
-                            'constant', constant_values=(0.0, 0.0))
-                    tmp_accel = np.pad(np.diff(tmp_diff, axis=0),
-                            ((0, 1), (0, 0)),
-                            'constant', constant_values=(0.0, 0.0))
-                    x_arti = np.concatenate((x_arti, tmp_diff, tmp_accel), axis=1)
+                    # compute deltas and deltas deltas for articulatory features
+                    _, x_arti = from_mfcc_ema_to_mfcc_arti_tuple(x_mfcc, x_arti)
+                    # add the adjacent frames
+                    if input_n_frames_mfcc > 1:
+                        x_mfcc = padding(input_n_frames_mfcc, x_mfcc)
                     if input_n_frames_arti > 1:
                         x_arti = padding(input_n_frames_arti, x_arti)
-                    all_input = np.append(all_input, np.concatenate([
-                        x_mfcc, x_arti], axis=1), axis=0)
+                    # do feature transformations if any
+                    # TODO with mocha_timit_params.json params
+                    # concatenate
+                    x_mfcc_arti = np.concatenate((x_mfcc, x_arti), axis=1)
+                    all_input = np.append(all_input, x_mfcc_arti, axis=0)
                     map_file_to_start_end[cline] = (start, all_input.shape[0])
             with open(input_file_name, 'w') as concat:
                 np.save(concat, all_input)

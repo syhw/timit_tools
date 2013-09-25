@@ -20,6 +20,20 @@ usage = """
 output files are MLF_FILENAME_xdata.npy and MLF_FILENAME_ylabels.npy
     """
 
+def from_mfcc_ema_to_mfcc_arti_tuple(x_mfc, x_ema):
+    """ Takes MFCC and EMA data and output concatenated MFCC 
+    and position/speed/acceleration of the articulators """
+    # THE EMA FILE STARTS AFTER "!ENTER" and "breath" # TODO check again
+    tmp_ema = np.pad(x_ema, 
+            ((x_mfc.shape[0] - x_ema.shape[0], 0), (0, 0)), 
+            'constant', constant_values=(0.0, 0.0)) # should we pad with 0? TODO
+    tmp_diff = np.pad(np.diff(tmp_ema, axis=0),
+            ((0, 1), (0, 0)),
+            'constant', constant_values=(0.0, 0.0))
+    tmp_accel = np.pad(np.diff(tmp_diff, axis=0),
+            ((0, 1), (0, 0)),
+            'constant', constant_values=(0.0, 0.0))
+    return x_mfc, np.concatenate((tmp_ema, tmp_diff, tmp_accel), axis=1)
 
 def extract_from_mlf(mlf):
     x = np.ndarray((0, N_MFCC_COEFFS + N_EMA_COEFFS), dtype='float32')
@@ -38,17 +52,8 @@ def extract_from_mlf(mlf):
                 mfc_file = t.getall()
                 with open(line.strip('"')[:-4] + '_ema.npy') as ema_f: # .lab -> _ema.npy
                     ema_file = np.load(ema_f)[:,2:]
-                # THE EMA FILE STARTS AFTER "!ENTER" and "breath" # TODO check again
-                ema_file = np.pad(ema_file, 
-                        ((mfc_file.shape[0] - ema_file.shape[0], 0), (0, 0)), 
-                        'constant', constant_values=(0.0, 0.0)) # should we pad with 0? TODO
-                tmp_diff = np.pad(np.diff(ema_file, axis=0),
-                        ((0, 1), (0, 0)),
-                        'constant', constant_values=(0.0, 0.0))
-                tmp_accel = np.pad(np.diff(tmp_diff, axis=0),
-                        ((0, 1), (0, 0)),
-                        'constant', constant_values=(0.0, 0.0))
-                x_file = np.concatenate((mfc_file, ema_file, tmp_diff, tmp_accel), axis=1)
+                x_file = np.concatenate(from_mfcc_ema_to_mfcc_arti_tuple(
+                    mfc_file, ema_file), axis=1)
                 x = np.append(x, x_file, axis=0)
                 tmp_len_x = mfc_file.shape[0]
             elif line[0].isdigit():
