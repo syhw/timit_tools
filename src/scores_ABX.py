@@ -8,7 +8,7 @@ sys.path.append('DBN')
 
 from batch_viterbi import precompute_det_inv, phones_mapping, parse_hmm
 from batch_viterbi import compute_likelihoods, compute_likelihoods_dbn
-from batch_viterbi import Phone, viterbi, initialize_transitions
+from batch_viterbi import viterbi, initialize_transitions
 from batch_viterbi import penalty_scale, padding
 
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)

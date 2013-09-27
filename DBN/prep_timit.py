@@ -3,7 +3,7 @@ import theano.tensor as T
 import numpy as np
 
 BORROW = True # True makes it faster with the GPU
-USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
+USE_CACHING = False # beware if you use RBM / GRBM alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = True # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = True # train sklearn classifiers to compare the DBN to
 
@@ -61,6 +61,16 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f):
     print "score random forest", scores2.mean()
     ###with open('random_forest_classif.pickle', 'w') as f: TODO TODO TODO
     ###    cPickle.dump(clf2, f)  TODO TODO TODO 
+
+    print "*** training a linear discriminant classifier ***"
+    from sklearn.lda import LDA
+    lda = LDA()
+    lda.fit(train_x[:,:39], train_y_f, store_covariance=True)
+    print "with MFCC only:", lda.score(test_x[:,:39], test_y_f)
+    lda.fit(train_x[:,:39], train_y_f, store_covariance=True)
+    print "with arti only:", lda.score(test_x[:,39:], test_y_f)
+    with open('lda_classif.pickle', 'w') as f:
+        cPickle.dump(lda, f)
     
 
     ### Feature selection
@@ -77,10 +87,8 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f):
     print(" - ANOVA scoring (order of the MFCC)")
     print scores
     from sklearn.feature_selection import RFECV
-    from sklearn.lda import LDA
     print(" - Recursive feature elimination with cross-validation with LDA")
     lda = LDA()
-    #lda.fit(train_x, train_y_f, store_covariance=True)
     rfecv = RFECV(estimator=lda, step=1, scoring='accuracy')
     rfecv.fit(train_x, train_y_f)
     print("Optimal number of features : %d" % rfecv.n_features_)

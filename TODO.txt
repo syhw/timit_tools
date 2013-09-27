@@ -1,5 +1,6 @@
 - remove bug with bigram decoding (trans prob bigrams vs unigrams)
 - normalize properly likelihoods and posteriors for ABX
+- MOCHA (and other articulatory datasets) with a specific DBN trained for
+  acoustic/articulatory inversion
 - other datasets: MNGU0, USC TIMIT, Switchboard...
-- TODO line 610 in src/batch_viterbi.py
 
