@@ -1,40 +1,9 @@
-import theano, copy, sys
+import theano, copy, sys, json, cPickle
 import theano.tensor as T
-import cPickle
 import numpy as np
 
-BORROW = True
-USE_CACHING = False # beware if you use RBM / GRBM alternatively, set it to False
-
-def padding(nframes, x, y):
-    # dirty hacky padding
-    ba = (nframes - 1) / 2 # before // after
-    x2 = copy.deepcopy(x)
-    on_x2 = False
-    x_f = np.zeros((x.shape[0], nframes * x.shape[1]), dtype='float32')
-    for i in xrange(x.shape[0]):
-        if y[i] == '!ENTER[2]' and y[i-1] != '!ENTER[2]': # TODO general case
-            on_x2 = not on_x2
-            if on_x2:
-                x2[i - ba:i,:] = 0.0
-            else:
-                x[i - ba:i,:] = 0.0
-        if i+ba < y.shape[0] and '!EXIT' in y[i] and not '!EXIT' in y[i+ba]: # TODO general
-            if on_x2:
-                x2[i+ba:i+2*ba+1,:] = 0.0
-            else:
-                x[i+ba:i+2*ba+1,:] = 0.0
-        if on_x2:
-            x_f[i] = np.pad(x2[max(0, i - ba):i + ba + 1].flatten(),
-                    (max(0, (ba - i) * x.shape[1]), 
-                        max(0, ((i+ba+1) - x.shape[0]) * x.shape[1])),
-                    'constant', constant_values=(0,0))
-        else:
-            x_f[i] = np.pad(x[max(0, i - ba):i + ba + 1].flatten(),
-                    (max(0, (ba - i) * x.shape[1]), 
-                        max(0, ((i+ba+1) - x.shape[0]) * x.shape[1])),
-                    'constant', constant_values=(0,0))
-    return x_f
+from prep_timit import padding, BORROW, USE_CACHING
+from prep_timit import train_classifiers, TRAIN_CLASSIFIERS, TRAIN_CLASSIFIERS_1_FRAME
 
 
 def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False, 
@@ -63,7 +32,7 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
 
     except:
         print >> sys.stderr, "you need the .npy python arrays"
-        print >> sys.stderr, "you can produce them with src/timit_to_numpy.py"
+        print >> sys.stderr, "you can produce them with src/mocha_timit_to_numpy.py"
         print >> sys.stderr, "applied to the HTK force-aligned MLF train/test files"
         print >> sys.stderr, dataset + "/aligned_train_xdata.npy"
         print >> sys.stderr, dataset + "/aligned_train_ylabels.npy"
@@ -85,6 +54,8 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
                                  train_x[:, n_mfcc:]], axis=1)
         test_x = np.concatenate([pca.transform(test_x[:, :n_mfcc]),
                                  test_x[:, n_mfcc:]], axis=1)
+        with open('pca_mfcc_' + pca_whiten_arti + '.pickle', 'w') as f:
+            cPickle.dump(pca, f)
     n_arti = 60
     if pca_whiten_arti:
         ### PCA whitening, beware it's sklearn's and thus stays in PCA space
@@ -97,6 +68,8 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
                                  pca.transform(train_x[:, n_mfcc:])], axis=1)
         test_x = np.concatenate([test_x[:, :n_mfcc],
                                  pca.transform(test_x[:, n_mfcc:])], axis=1)
+        with open('pca_arti_' + pca_whiten_arti + '.pickle', 'w') as f:
+            cPickle.dump(pca, f)
     if unit:
         ### Putting values on [0-1]
         # TODO or do that globally on all data
@@ -141,13 +114,33 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
     for i, e in enumerate(test_y):
         test_y_f[i] = to_int[e]
 
-    return ([np.concatenate([train_x_f_mfcc, train_x_f_arti], axis=1), train_y_f, 
-            np.concatenate([test_x_f_mfcc, test_x_f_arti], axis=1), test_y_f],
-            n_mfcc, n_arti)
+    ret_train_x = np.concatenate([train_x_f_mfcc, train_x_f_arti], axis=1)
+    ret_test_x = np.concatenate([test_x_f_mfcc, test_x_f_arti], axis=1)
+
+    if TRAIN_CLASSIFIERS:
+        train_classifiers(train_x, train_y_f, test_x, test_y_f) # ONLY 1 FRAME
+
+    return ([ret_train_x, train_y_f, ret_test_x, test_y_f], n_mfcc, n_arti)
+
 
 def load_data(dataset, nframes_mfcc=11, nframes_arti=5, 
               unit=False, normalize=False, 
               pca_whiten_mfcc=0, pca_whiten_arti=0, cv_frac=0.2):
+
+    params = {'nframes_mfcc': nframes_mfcc,
+              'nframes_arti': nframes_arti,
+              'unit': unit,
+              'normalize': normalize,
+              'pca_whiten_mfcc_path': 'pca_mfcc_'+pca_whiten_mfcc+'.pickle' if pca_whiten_mfcc else 0,
+              'pca_whiten_arti_path': 'pca_arti_'+pca_whiten_arti+'.pickle' if pca_whiten_arti else 0,
+              'cv_frac': cv_frac,
+              'theano_borrow?': BORROW,
+              'use_caching?': USE_CACHING,
+              'train_classifiers_1_frame?': TRAIN_CLASSIFIERS_1_FRAME,
+              'train_classifiers?': TRAIN_CLASSIFIERS}
+    with open('mocha_timit_params.json', 'w') as f:
+        f.write(json.dumps(params))
+
     def prep_and_serialize():
         ([train_x, train_y, test_x, test_y], n_mfcc, n_arti) = prep_data(
                 dataset, 
@@ -194,6 +187,5 @@ def load_data(dataset, nframes_mfcc=11, nframes_arti=5,
     test_set_y = theano.shared(np.asarray(test_y, dtype=theano.config.floatX), borrow=BORROW)
     test_set_y = T.cast(test_set_y, 'int32')
     return ([(train_set_x, train_set_y), 
-            #(copy.deepcopy(test_set_x), copy.deepcopy(test_set_y)),
             (val_set_x, val_set_y),
             (test_set_x, test_set_y)], n_mfcc, n_arti)

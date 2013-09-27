@@ -1,11 +1,11 @@
-import theano, copy, sys
+import theano, copy, sys, json, cPickle
 import theano.tensor as T
-import cPickle
 import numpy as np
 
-BORROW = True
+BORROW = True # True makes it faster with the GPU
 USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
-TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
+TRAIN_CLASSIFIERS_1_FRAME = True # train sklearn classifiers on 1 frame
+TRAIN_CLASSIFIERS = True # train sklearn classifiers to compare the DBN to
 
 def padding(nframes, x, y):
     # dirty hacky padding
@@ -37,8 +37,60 @@ def padding(nframes, x, y):
                     'constant', constant_values=(0,0))
     return x_f
 
+def train_classifiers(train_x, train_y_f, test_x, test_y_f):
+    ### Training a SVM to compare results TODO
+    #print "training a SVM" TODO
+
+    ### Training a linear model (elasticnet) to compare results
+    print("*** training a linear model with SGD ***")
+    from sklearn import linear_model
+    from sklearn.cross_validation import cross_val_score
+    clf = linear_model.SGDClassifier(loss='modified_huber', penalty='elasticnet') # TODO change and CV params
+    clf.fit(train_x, train_y_f)
+    scores = cross_val_score(clf, test_x, test_y_f)
+    print "score linear classifier (elasticnet, SGD trained)", scores.mean()
+    with open('linear_elasticnet_classif.pickle', 'w') as f:
+        cPickle.dump(clf, f)
+
+    ### Training a random forest to compare results
+    print("*** training a random forest ***")
+    from sklearn.ensemble import RandomForestClassifier
+    clf2 = RandomForestClassifier(n_jobs=-1, max_features='log2', min_samples_split=3) # TODO change and CV params
+    clf2.fit(train_x, train_y_f)
+    scores2 = cross_val_score(clf2, test_x, test_y_f)
+    print "score random forest", scores2.mean()
+    ###with open('random_forest_classif.pickle', 'w') as f: TODO TODO TODO
+    ###    cPickle.dump(clf2, f)  TODO TODO TODO 
+    
+
+    ### Feature selection
+    print("*** feature selection now: ***")
+    print(" - Feature importances for the random forest classifier")
+    print clf2.feature_importances_
+    from sklearn.feature_selection import SelectPercentile, f_classif 
+    # SelectKBest TODO?
+    selector = SelectPercentile(f_classif, percentile=10) # ANOVA
+    selector.fit(train_x, train_y_f)
+    print selector.pvalues_
+    scores = -np.log10(selector.pvalues_)
+    scores /= scores.max()
+    print(" - ANOVA scoring (order of the MFCC)")
+    print scores
+    from sklearn.feature_selection import RFECV
+    from sklearn.lda import LDA
+    print(" - Recursive feature elimination with cross-validation with LDA")
+    lda = LDA()
+    #lda.fit(train_x, train_y_f, store_covariance=True)
+    rfecv = RFECV(estimator=lda, step=1, scoring='accuracy')
+    rfecv.fit(train_x, train_y_f)
+    print("Optimal number of features : %d" % rfecv.n_features_)
+    print("Ranking (order of the MFCC):")
+    print rfecv.ranking_
+    # TODO sample features combinations with LDA? kernels?
+
 
 def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False):
+    # TODO "standard split" as in /fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split
     try:
         train_x = np.load(dataset + "/aligned_train_xdata.npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
@@ -74,6 +126,8 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False)
         pca = PCA(n_components='mle', whiten=True)
         train_x = pca.fit_transform(train_x)
         test_x = pca.fit_transform(test_x)
+        with open('pca_' + pca_whiten + '.pickle', 'w') as f:
+            cPickle.dump(pca, f)
     train_x_f = train_x
     test_x_f = test_x
 
@@ -101,33 +155,24 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False)
         test_y_f[i] = to_int[e]
 
     if TRAIN_CLASSIFIERS:
-        ### Training a SVM to compare results TODO
-        #print "training a SVM" TODO
-
-        ### Training a linear model (elasticnet) to compare results
-        print "training a linear model with SGD"
-        from sklearn import linear_model
-        from sklearn.cross_validation import cross_val_score
-        clf = linear_model.SGDClassifier(loss='modified_huber', penalty='elasticnet') # TODO change and CV params
-        clf.fit(train_x, train_y_f)
-        scores = cross_val_score(clf, test_x, test_y_f)
-        print "score linear classifier (elasticnet, SGD trained)", scores.mean()
-        with open('linear_elasticnet_classif.pickle', 'w') as f:
-            cPickle.dump(clf, f)
-
-        ### Training a random forest to compare results
-        print "training a random forest"
-        from sklearn.ensemble import RandomForestClassifier
-        clf2 = RandomForestClassifier(n_jobs=-1, max_depth=None, min_samples_split=3) # TODO change and CV params
-        clf2.fit(train_x, train_y_f)
-        scores2 = cross_val_score(clf2, test_x, test_y_f)
-        print "score random forest", scores2.mean()
-        with open('random_forest_classif.pickle', 'w') as f:
-            cPickle.dump(clf2, f)
+        train_classifiers(train_x, train_y_f, test_x, test_y_f) # ONLY 1 FRAME
 
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
+
 def load_data(dataset, nframes=11, unit=False, normalize=False, pca_whiten=False, cv_frac=0.2):
+    params = {'nframes_mfcc': nframes,
+              'unit': unit,
+              'normalize': normalize,
+              'pca_whiten_mfcc_path': 'pca_'+pca_whiten+'.pickle' if pca_whiten else 0,
+              'cv_frac': cv_frac,
+              'theano_borrow?': BORROW,
+              'use_caching?': USE_CACHING,
+              'train_classifiers_1_frame?': TRAIN_CLASSIFIERS_1_FRAME,
+              'train_classifiers?': TRAIN_CLASSIFIERS}
+    with open('timit_params.json', 'w') as f:
+        f.write(json.dumps(params))
+
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
                 nframes=nframes, unit=unit, normalize=normalize, pca_whiten=pca_whiten)
@@ -159,7 +204,6 @@ def load_data(dataset, nframes=11, unit=False, normalize=False, pca_whiten=False
 
     from sklearn import cross_validation
     X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=cv_frac, random_state=0)
-    
     train_set_x = theano.shared(X_train, borrow=BORROW)
     train_set_y = theano.shared(np.asarray(y_train, dtype=theano.config.floatX), borrow=BORROW)
     train_set_y = T.cast(train_set_y, 'int32')
@@ -169,7 +213,7 @@ def load_data(dataset, nframes=11, unit=False, normalize=False, pca_whiten=False
     test_set_x = theano.shared(test_x, borrow=BORROW)
     test_set_y = theano.shared(np.asarray(test_y, dtype=theano.config.floatX), borrow=BORROW)
     test_set_y = T.cast(test_set_y, 'int32')
+
     return [(train_set_x, train_set_y), 
-            #(copy.deepcopy(test_set_x), copy.deepcopy(test_set_y)),
             (val_set_x, val_set_y),
             (test_set_x, test_set_y)] 

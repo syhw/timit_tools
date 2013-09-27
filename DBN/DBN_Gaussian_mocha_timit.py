@@ -1,7 +1,6 @@
 """
 """
 import cPickle
-import gzip
 import os
 import sys
 import time
@@ -20,14 +19,14 @@ from prep_mocha_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
-#DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/MOCHA_TIMIT/only_msak0'
-DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/MOCHA_TIMIT'
+DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/MOCHA_TIMIT/only_msak0'
+#DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/MOCHA_TIMIT'
 N_FRAMES_MFCC = 11  # HAS TO BE AN ODD NUMBER 
               #(same number before and after center frame)
 N_FRAMES_ARTI = 7  # HAS TO BE AN ODD NUMBER
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_Gaussian_mocha_PCA_gpu'
+output_file_name = 'dbn_mocha_gpu'
 
 
 class DBN(object):
@@ -307,8 +306,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.05, pretraining_epochs=20, # TODO 100+
-             pretrain_lr=0.1, k=1, training_epochs=42, # TODO 100+
+def test_DBN(finetune_lr=0.05, pretraining_epochs=10, # TODO 100+
+             pretrain_lr=0.05, k=1, training_epochs=42, # TODO 100+
              dataset=DATASET, batch_size=10):
     """
 
@@ -334,7 +333,8 @@ def test_DBN(finetune_lr=0.05, pretraining_epochs=20, # TODO 100+
                                            nframes_arti=N_FRAMES_ARTI, 
                                            unit=False, normalize=True, 
                                            pca_whiten_mfcc=0, 
-                                           pca_whiten_arti='mle', cv_frac=0.1)
+                                           pca_whiten_arti=0,#'mle', 
+                                           cv_frac=0.1)
     # unit=False because we don't want the [0-1] binary RBM projection
     # normalize=True because we want the data to be 0 centered with 1 variance.
     # pca_whiten_arti='mle' i.e. use an estimator to determine PCA n_components
