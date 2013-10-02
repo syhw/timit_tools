@@ -34,7 +34,7 @@ SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
 epsilon = 1E-5 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
-N_BATCHES_DATASET = 4 # number of batches in which we divide the dataset 
+N_BATCHES_DATASET = 8 # number of batches in which we divide the dataset 
                       # (to fit in the GPU memory, only 2Gb at home)
 
 class Phone:
@@ -138,11 +138,13 @@ def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
     from theano import shared#, scan
     # propagating through the deep belief net
     batch_size = mat.shape[0] / N_BATCHES_DATASET
-    out_ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
     max_layer = dbn.n_layers
+    out_ret = None
     if depth != None:
         max_layer = min(dbn.n_layers, depth)
         out_ret = np.ndarray((mat.shape[0], dbn.rbm_layers[max_layer].W.shape[1].eval()), dtype="float32")
+    else:
+        out_ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
 
     for ind in xrange(0, mat.shape[0]+1, batch_size):
         output = shared(mat[ind:ind+batch_size])
@@ -166,7 +168,7 @@ def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
             ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)
             out_ret[ind:ind+batch_size] = T.log(ret).eval()
         else:
-            out_ret[ind:ind+batch_size] = output.eval()
+            out_ret[ind:ind+batch_size] = T.log(output).eval()
     return out_ret
 
 
