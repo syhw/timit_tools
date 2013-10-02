@@ -37,7 +37,7 @@ def padding(nframes, x, y):
                     'constant', constant_values=(0,0))
     return x_f
 
-def train_classifiers(train_x, train_y_f, test_x, test_y_f):
+def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False):
     ### Training a SVM to compare results TODO
     #print "training a SVM" TODO
 
@@ -65,13 +65,19 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f):
     print "*** training a linear discriminant classifier ***"
     from sklearn.lda import LDA
     lda = LDA()
-    lda.fit(train_x[:,:39], train_y_f, store_covariance=True)
-    print "with MFCC only:", lda.score(test_x[:,:39], test_y_f)
-    lda.fit(train_x[:,:39], train_y_f, store_covariance=True)
-    print "with arti only:", lda.score(test_x[:,39:], test_y_f)
-    with open('lda_classif.pickle', 'w') as f:
-        cPickle.dump(lda, f)
-    
+    if articulatory:
+        lda.fit(train_x[:,:39], train_y_f, store_covariance=True)
+        print "with MFCC only:", lda.score(test_x[:,:39], test_y_f)
+        lda2 = LDA()
+        lda2.fit(train_x[:,:39], train_y_f, store_covariance=True)
+        print "with arti only:", lda2.score(test_x[:,39:], test_y_f)
+        with open('lda_classif_mfcc_arti.pickle', 'w') as f:
+            cPickle.dump((lda, lda2), f)
+    else:
+        lda.fit(train_x, train_y_f, store_covariance=True)
+        print "LDA score:", lda.score(test_x, test_y_f)
+        with open('lda_classif.pickle', 'w') as f:
+            cPickle.dump(lda, f)
 
     ### Feature selection
     print("*** feature selection now: ***")
@@ -97,8 +103,9 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f):
     # TODO sample features combinations with LDA? kernels?
 
 
-def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False):
+def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False, pca_whiten=False):
     # TODO "standard split" as in /fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split
+    # normalize takes precedence over student's t-stat
     try:
         train_x = np.load(dataset + "/aligned_train_xdata.npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
@@ -128,6 +135,10 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False)
         # TODO or do that globally on all data
         train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
+    elif student:
+        ### T-statistic
+        train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
+        test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0, ddof=1)
     if pca_whiten: # TODO change/correct that looking at prep_mocha_timit
         ### PCA whitening, beware it's sklearn's and thus stays in PCA space
         from sklearn.decomposition import PCA
@@ -168,10 +179,11 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, pca_whiten=False)
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
 
-def load_data(dataset, nframes=11, unit=False, normalize=False, pca_whiten=False, cv_frac=0.2):
+def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, pca_whiten=False, cv_frac=0.2):
     params = {'nframes_mfcc': nframes,
               'unit': unit,
               'normalize': normalize,
+              'student': student,
               'pca_whiten_mfcc_path': 'pca_'+pca_whiten+'.pickle' if pca_whiten else 0,
               'cv_frac': cv_frac,
               'theano_borrow?': BORROW,
@@ -183,7 +195,7 @@ def load_data(dataset, nframes=11, unit=False, normalize=False, pca_whiten=False
 
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
-                nframes=nframes, unit=unit, normalize=normalize, pca_whiten=pca_whiten)
+                nframes=nframes, unit=unit, normalize=normalize, student=student, pca_whiten=pca_whiten)
         with open('train_x_' + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_x)
         with open('train_y_' + str(nframes) + '.npy', 'w') as f:
