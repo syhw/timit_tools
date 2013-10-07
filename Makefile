@@ -48,11 +48,20 @@ prepare_CSJ:
 	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
-	python src/create_phonesMLF_list_labels.py $(dataset)/test
+	p/ython src/create_phonesMLF_list_labels.py $(dataset)/test
 
 
 prepare_Buckeye:
-	# TODO
+	@echo "\n>>> produce MFCC from WAV files\n"
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
+	@ echo "\n>>> convert the Buckeye annotations (.phones) to .lab (HTK format) \n"
+	python src/buckeye_to_lab.py $(dataset)/train
+	python src/buckeye_to_lab.py $(dataset)/test
+	# TODO substitute phones
+	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
+	python src/create_phonesMLF_list_labels.py $(dataset)/train
+	python src/create_phonesMLF_list_labels.py $(dataset)/test
 
 
 train: train_monophones
