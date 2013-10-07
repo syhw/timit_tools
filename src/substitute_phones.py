@@ -76,9 +76,9 @@ def process(folder,
             first_phone = text_buffer[0][-1]
             last_phone = text_buffer[-1][-1]
             if sentences:
-                if first_phone == 'h#' or first_phone == 'sil':
+                if first_phone == 'h#' or first_phone == 'sil' or first_phone == '<s>':
                     text_buffer[0] = text_buffer[0][:-1] + ['!ENTER']
-                if last_phone == 'h#' or last_phone == 'sil':
+                if last_phone == 'h#' or last_phone == 'sil' or last_phone == '</s>':
                     text_buffer[-1] = text_buffer[-1][:-1] + ['!EXIT']
             if startend_sil:
                 text_buffer[0] = text_buffer[0][:-1] + ['sil']

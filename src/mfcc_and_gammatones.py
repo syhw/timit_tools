@@ -78,7 +78,7 @@ def process(folder,
             call(['sox', tempfname, wavfname]) # w/o headers, sox uses extension
             shutil.move(tempfname, rawfname)
             if htk_mfc:
-                call(['HCopy','-C', 'wav_config', wavfname, mfccfname])
+                call(['HCopy', '-C', 'wav_config', wavfname, mfccfname])
             sr = 16000
             sr, sound = wavfile.read(wavfname)
             if stereo_wav and len(sound.shape) == 2: # in mono sound is a list

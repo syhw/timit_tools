@@ -709,6 +709,8 @@ def process(ofname, iscpfname, ihmmfname,
         if VERBOSE:
             print tmp_likelihoods
             print tmp_likelihoods.shape
+        print map_states_to_phones
+        print dbn_phones_to_states
         columns_remapping = [dbn_phones_to_states[map_states_to_phones[i]] for i in xrange(tmp_likelihoods.shape[1])]
         if VERBOSE:
             print columns_remapping

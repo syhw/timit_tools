@@ -1,4 +1,4 @@
-TMP_TRAIN_FOLDER=tmp_train
+TMP_TRAIN_FOLDER=tmp_CSJ_train
 
 help:
 	@echo "Usage (in order):"
@@ -7,7 +7,7 @@ help:
 	@echo "make test dataset_test_folder=~/postdoc/datasets/TIMIT/test"
 
 
-prepare: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
+prepare_timit: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo "*** preparing the dataset for phones recognition ***"
 	@echo "\n>>> produce MFCC from WAV files\n"
 	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
@@ -24,7 +24,8 @@ prepare: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 
 
 prepare_mocha: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
-	# see files in src/ and in mocha-timit/ for specifities of MOCHA-TIMIT
+	# first split in train and test with src/train_test_folders.py
+	# & see files in src/ and in mocha-timit/ for specifities of MOCHA-TIMIT
 	@echo "*** preparing the dataset for phones recognition ***"
 	@echo "\n>>> produce MFCC from WAV files\n"
 	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
@@ -38,6 +39,20 @@ prepare_mocha: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
+
+
+prepare_CSJ:
+	# use src/train_test_folders.py to split in train/test sets
+	@echo "\n>>> put ENTER and EXIT symbols \n"
+	python src/substitute_phones.py $(dataset)/train --sentences --nosubst
+	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
+	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
+	python src/create_phonesMLF_list_labels.py $(dataset)/train
+	python src/create_phonesMLF_list_labels.py $(dataset)/test
+
+
+prepare_Buckeye:
+	# TODO
 
 
 train: train_monophones
@@ -55,7 +70,8 @@ train_monophones_monogauss:
 	python -c "import sys;print '( < ' + ' | '.join([line.strip('\n') for line in sys.stdin]) + ' > )'" < $(TMP_TRAIN_FOLDER)/monophones0 > $(TMP_TRAIN_FOLDER)/gram
 	HParse $(TMP_TRAIN_FOLDER)/gram $(TMP_TRAIN_FOLDER)/wdnet
 	#HBuild $(TMP_TRAIN_FOLDER)/monophones0 $(TMP_TRAIN_FOLDER)/wdnet
-	cp proto.hmm $(TMP_TRAIN_FOLDER)/
+	#cp proto.hmm $(TMP_TRAIN_FOLDER)/
+	python src/proto_hmm.py $(TMP_TRAIN_FOLDER)/
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_simple0
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_simple1
 	mkdir -p $(TMP_TRAIN_FOLDER)/hmm_mono_simple2
@@ -249,20 +265,24 @@ align:
 	@echo ">>> Using: $(input_scp) and $(input_mlf), going to $(output_mlf)"
 	HVite -a -f -y lab -H $(TMP_TRAIN_FOLDER)/hmm_final/macros -H $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs -i $(output_mlf) -I $(input_mlf) -S $(input_scp) $(TMP_TRAIN_FOLDER)/dict $(TMP_TRAIN_FOLDER)/phones 
 	# -f if you want the full states alignment, -o C for likelihoods by phone, see p.326 in the HTK book
+	
 
 train_test_monophones:
 	make train_monophones dataset_train_folder=$(dataset)/train
 	make test_monophones dataset_test_folder=$(dataset)/test
 
-all:
-	make prepare $(dataset)
+
+all_timit:
+	make prepare_timit $(dataset)
 	make train_monophones dataset_train_folder=$(dataset)/train
 	make bigram_LM
 	make test_monophones_bigram_LM dataset_test_folder=$(dataset)/test
 
+
 test_my_bigram:
 	python src/viterbi.py $(TMP_TRAIN_FOLDER)/my_viterbi.mlf ~/datasets/TIMIT/test/test.scp $(TMP_TRAIN_FOLDER)/hmm_final/hmmdefs --ub $(TMP_TRAIN_FOLDER)/bigram.pickle
 	HResults -I $(dataset_test_folder)/test.mlf $(TMP_TRAIN_FOLDER)/phones $(TMP_TRAIN_FOLDER)/my_viterbi.mlf
+
 
 clean:
 	rm -rf $(TMP_TRAIN_FOLDER)
