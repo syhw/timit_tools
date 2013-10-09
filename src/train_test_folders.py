@@ -15,6 +15,8 @@ for d, ds, fs in os.walk(folder):
     for fname in fs:
         if fname[-4:] != '.lab':
             continue
+        if fname[0] == '.':
+            continue
         if random.uniform(0,1) > 0.2:
             print fname, 'to train'
             shutil.copy(d + '/' + fname, whereto + 'train/')

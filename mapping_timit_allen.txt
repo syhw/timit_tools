@@ -69,7 +69,7 @@ xs    sh     SH      ʃ      shut
 xc    ch     CH      ʧ      church
 h     hh     HH      h      hat
 b     b      B       b      bet
-d     d      D       d       debt
+d     d      D       d      debt
 g     g      G       g      get
 v     v      V       v      vat
 xd    dh     DH      ð      that

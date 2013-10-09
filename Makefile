@@ -15,9 +15,10 @@ prepare_timit: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
 	python src/timit_to_htk_labels.py $(dataset)/train
 	python src/timit_to_htk_labels.py $(dataset)/test
-	@echo "\n>>> substitute phones (61 down to 39 if not --nosubst) \n"
-	python src/substitute_phones.py $(dataset)/train --sentences --nosubst
-	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
+	@echo "\n>>> substitute phones (61 down to 39 if using timit_foldings.json) \n"
+	@echo ">>> Here we are just putting the !ENTER and !EXIT symbols\n"
+	python src/substitute_phones.py $(dataset)/train --sentences
+	python src/substitute_phones.py $(dataset)/test --sentences
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
@@ -34,8 +35,8 @@ prepare_mocha: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	python mocha-timit/mocha_timit_to_htk_labels.py $(dataset)/train
 	python mocha-timit/mocha_timit_to_htk_labels.py $(dataset)/test
 	@echo "\n>>> put ENTER and EXIT symbols \n"
-	python src/substitute_phones.py $(dataset)/train --sentences --nosubst
-	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
+	python src/substitute_phones.py $(dataset)/train --sentences
+	python src/substitute_phones.py $(dataset)/test --sentences
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
@@ -44,21 +45,23 @@ prepare_mocha: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 prepare_CSJ:
 	# use src/train_test_folders.py to split in train/test sets
 	@echo "\n>>> put ENTER and EXIT symbols \n"
-	python src/substitute_phones.py $(dataset)/train --sentences --nosubst
-	python src/substitute_phones.py $(dataset)/test --sentences --nosubst
+	python src/substitute_phones.py $(dataset)/train --sentences CSJ_foldings.json
+	python src/substitute_phones.py $(dataset)/test --sentences CSJ_foldings.json
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
-	p/ython src/create_phonesMLF_list_labels.py $(dataset)/test
+	python src/create_phonesMLF_list_labels.py $(dataset)/test
 
 
-prepare_Buckeye:
+prepare_buckeye:
 	@echo "\n>>> produce MFCC from WAV files\n"
 	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
 	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
 	@ echo "\n>>> convert the Buckeye annotations (.phones) to .lab (HTK format) \n"
-	python src/buckeye_to_lab.py $(dataset)/train
-	python src/buckeye_to_lab.py $(dataset)/test
-	# TODO substitute phones
+	python src/buckeye_to_htk_labels.py $(dataset)/train --split
+	python src/buckeye_to_htk_labels.py $(dataset)/test --split
+	@echo "\n>>> put ENTER and EXIT symbols \n"
+	python src/substitute_phones.py $(dataset)/train --sentences buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/test --sentences buckeye_foldings.json
 	@echo "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
@@ -283,6 +286,20 @@ train_test_monophones:
 
 all_timit:
 	make prepare_timit $(dataset)
+	make train_monophones dataset_train_folder=$(dataset)/train
+	make bigram_LM
+	make test_monophones_bigram_LM dataset_test_folder=$(dataset)/test
+
+
+all_buckeye:
+	make prepare_buckeye $(dataset)
+	make train_monophones dataset_train_folder=$(dataset)/train
+	make bigram_LM
+	make test_monophones_bigram_LM dataset_test_folder=$(dataset)/test
+
+
+all_CSJ:
+	make prepare_CSJ $(dataset)
 	make train_monophones dataset_train_folder=$(dataset)/train
 	make bigram_LM
 	make test_monophones_bigram_LM dataset_test_folder=$(dataset)/test

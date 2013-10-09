@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+from numpy.testing import assert_allclose
 import htkmfc
 from brian import Hz, log10
 from brian.hears import loadsound, erbspace, Gammatone, ApproximateGammatone
@@ -24,7 +25,8 @@ TEST = True # test numpy serialization
  
 usage = """
     python timit_to_numpy.py MLF_FILENAME.mlf
-output files are MLF_FILENAME_xdata.npy and MLF_FILENAME_ylabels.npy
+output files are MLF_FILENAME_xdata.npy, MLF_FILENAME_xgamma.npy, 
+and MLF_FILENAME_ylabels.npy
     """
 
 
@@ -73,15 +75,14 @@ def extract_from_mlf(mlf):
                 # subsample the gammatones at the same rate than the MFCC's
                 # (just for practicality so that they are aligned...)
                 n_samples = g.shape[0]*1./(t.getall().shape[0] + 1) # TODO check "+1"
-                #g_sub = subsample_average(g, n_samples)
-                # do the harmonic mean (nth root of the product of the terms)
-                g_sub = subsample_apply_f(g, n_samples, lambda z: np.power(np.prod(z), 1./n_samples))
-                #g_sub = subsample_apply_f(g, n_samples, lambda z: np.sqrt(np.sum(np.square(z))))
+                ### # do the harmonic mean (nth root of the product of the terms)
+                ### g_sub = subsample_apply_f(g, n_samples, lambda z: np.power(np.prod(z), 1./n_samples))
+                g_sub = subsample_apply_f(g, n_samples, lambda z: np.sqrt(np.sum(np.square(z))))
                 # compute the delta and delta of the subsampled gammatones
                 gamma_speed_accel = compute_speed_and_accel(g_sub)
                 # append
                 tmp = gamma_speed_accel[:t.getall().shape[0]] # TODO check
-                if tmp.shape[0] != t.getall().shape[0]:
+                if tmp.shape[0] != t.getall().shape[0]: # TODO remove
                     print line
                     print tmp.shape
                     print t.getall().shape
@@ -114,14 +115,14 @@ def extract_from_mlf(mlf):
         tx = np.load(rootname + '_xdata.npy')
         tx_gamma = np.load(rootname + '_xgamma.npy')
         ty = np.load(rootname + '_ylabels.npy')
-        if np.all(tx==x) and np.all(tx_gamma==x_gamma) and np.all(ty==yy):
+        if np.all(tx==x) and np.all(ty==yy):
+            assert_allclose(tx_gamma, x_gamma, err_msg="x_gamma and its serialized version are not allclose")
             print "SUCCESS: serialized and current in-memory arrays are equal"
             sys.exit(0)
         else:
             print "ERROR: serialized and current in-memory arrays differ!"
-            print np.all(tx==x)
-            print np.all(tx_gamma==x_gamma)
-            print np.all(ty==yy)
+            print "x (MFCC):", np.all(tx==x)
+            print "y (labels):", np.all(ty==yy)
             sys.exit(-1)
 
 
