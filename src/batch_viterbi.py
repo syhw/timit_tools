@@ -140,8 +140,9 @@ def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
     batch_size = mat.shape[0] / N_BATCHES_DATASET
     max_layer = dbn.n_layers
     out_ret = None
-    if depth != None:
+    if depth < dbn.n_layers:
         max_layer = min(dbn.n_layers, depth)
+        print max_layer
         out_ret = np.ndarray((mat.shape[0], dbn.rbm_layers[max_layer].W.shape[1].eval()), dtype="float32")
     else:
         out_ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
@@ -151,7 +152,7 @@ def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
         print "evaluating the DBN on all the test input"
         for layer_ind in xrange(max_layer):
             [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
-        if depth == None:
+        if depth >= dbn.n_layers:
 
             ### TODO REMOVE
             print "dbn output shape", output.shape.eval()
