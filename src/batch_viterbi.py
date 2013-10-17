@@ -119,7 +119,7 @@ def padding(nframes, x):
     return x_f
 
 
-def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
+def compute_likelihoods_dbn(dbn, mat, depth=np.iinfo(int).max, normalize=True, unit=False):
     """ compute the log-likelihoods of each states i according to the Deep 
     Belief Network (stacked RBMs) in dbn, for each line of mat (input data) 
     depth is the depth of the DBN at which the likelihoods will pop out,
@@ -153,19 +153,7 @@ def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
         for layer_ind in xrange(max_layer):
             [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
         if depth >= dbn.n_layers:
-
-            ### TODO REMOVE
             print "dbn output shape", output.shape.eval()
-            #print "dbn output", output.eval()
-###            try:
-###                with open('curr_last_rbm_output.npy', 'r') as f:
-###                    tmp = np.load(f)
-###            except:
-###                tmp = np.ndarray(output.shape.eval(), dtype='float32')
-###            with open('curr_last_rbm_output.npy', 'w') as f:
-###                tmp2 = np.concatenate([tmp, output.eval()], axis=0)
-###                np.save(f, tmp2)
-
             ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)
             out_ret[ind:ind+batch_size] = T.log(ret).eval()
         else:

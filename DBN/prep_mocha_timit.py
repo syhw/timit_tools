@@ -47,6 +47,8 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
         ### PCA whitening, beware it's sklearn's and thus stays in PCA space
         from sklearn.decomposition import PCA
         pca = PCA(n_components=pca_whiten_mfcc, whiten=True)
+        if pca_whiten_mfcc < 0:
+            pca = PCA(n_components='mle', whiten=True)
         pca.fit(train_x[:, :n_mfcc])
         n_mfcc = pca.n_components
         # and thus here we still never saw test data
@@ -61,6 +63,8 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
         ### PCA whitening, beware it's sklearn's and thus stays in PCA space
         from sklearn.decomposition import PCA
         pca = PCA(n_components=pca_whiten_arti, whiten=True)
+        if pca_whiten_arti < 0:
+            pca = PCA(n_components='mle', whiten=True)
         pca.fit(train_x[:, n_mfcc:])
         n_arti = pca.n_components
         # and thus here we still never saw test data
@@ -118,7 +122,7 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
     ret_test_x = np.concatenate([test_x_f_mfcc, test_x_f_arti], axis=1)
 
     if TRAIN_CLASSIFIERS:
-        train_classifiers(train_x, train_y_f, test_x, test_y_f) # ONLY 1 FRAME
+        train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=True) # ONLY 1 FRAME
 
     return ([ret_train_x, train_y_f, ret_test_x, test_y_f], n_mfcc, n_arti)
 

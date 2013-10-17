@@ -3,8 +3,8 @@ import theano.tensor as T
 import numpy as np
 
 BORROW = True # True makes it faster with the GPU
-USE_CACHING = False # beware if you use RBM / GRBM alternatively, set it to False
-TRAIN_CLASSIFIERS_1_FRAME = True # train sklearn classifiers on 1 frame
+USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
+TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = True # train sklearn classifiers to compare the DBN to
 
 def padding(nframes, x, y):
@@ -103,22 +103,26 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False):
     # TODO sample features combinations with LDA? kernels?
 
 
-def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False, pca_whiten=False):
+def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False, 
+              pca_whiten=0, gammatones=False):
     # TODO "standard split" as in /fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split
     # normalize takes precedence over student's t-stat
+    xname = "xdata"
+    if gammatones:
+        xname = "xgamma"
     try:
-        train_x = np.load(dataset + "/aligned_train_xdata.npy")
+        train_x = np.load(dataset + "/aligned_train_" + xname + ".npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
-        test_x = np.load(dataset + "/aligned_test_xdata.npy")
+        test_x = np.load(dataset + "/aligned_test_" + xname + ".npy")
         test_y = np.load(dataset + "/aligned_test_ylabels.npy")
 
     except:
         print >> sys.stderr, "you need the .npy python arrays"
         print >> sys.stderr, "you can produce them with src/timit_to_numpy.py"
         print >> sys.stderr, "applied to the HTK force-aligned MLF train/test files"
-        print >> sys.stderr, dataset + "/aligned_train_xdata.npy"
+        print >> sys.stderr, dataset + "/aligned_train_" + xname + ".npy"
         print >> sys.stderr, dataset + "/aligned_train_ylabels.npy"
-        print >> sys.stderr, dataset + "/aligned_test_xdata.npy"
+        print >> sys.stderr, dataset + "/aligned_test_" + xname + ".npy"
         print >> sys.stderr, dataset + "/aligned_test_ylabels.npy"
         sys.exit(-1)
 
@@ -135,17 +139,19 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False, pc
         # TODO or do that globally on all data
         train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
-    elif student:
+    elif student: # mutually exclusive
         ### T-statistic
-        train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
+        train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, ddof=1)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0, ddof=1)
-    if pca_whiten: # TODO change/correct that looking at prep_mocha_timit
+    if pca_whiten: 
         ### PCA whitening, beware it's sklearn's and thus stays in PCA space
         from sklearn.decomposition import PCA
-        pca = PCA(n_components='mle', whiten=True)
+        pca = PCA(n_components=pca_whiten, whiten=True)
+        if pca_whiten < 0:
+            pca = PCA(n_components='mle', whiten=True)
         train_x = pca.fit_transform(train_x)
-        test_x = pca.fit_transform(test_x)
-        with open('pca_' + pca_whiten + '.pickle', 'w') as f:
+        test_x = pca.transform(test_x)
+        with open('pca_' + xname + '.pickle', 'w') as f:
             cPickle.dump(pca, f)
     train_x_f = train_x
     test_x_f = test_x
@@ -173,49 +179,66 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False, pc
     for i, e in enumerate(test_y):
         test_y_f[i] = to_int[e]
 
-    if TRAIN_CLASSIFIERS:
+    if TRAIN_CLASSIFIERS_1_FRAME:
         train_classifiers(train_x, train_y_f, test_x, test_y_f) # ONLY 1 FRAME
 
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
 
-def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, pca_whiten=False, cv_frac=0.2):
+def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, pca_whiten=0, cv_frac=0.2, gammatones=False):
+    """ 
+    params:
+     - dataset: folder
+     - nframes: number of frames to replicate/pad
+     - unit?: put all the data into [0-1]
+     - normalize?: (X-mean(X))/std(X)
+     - student?: (X-mean(X))/std(X, deg_of_liberty=1)
+     - pca_whiten: not if 0, MLE if < 0, number of components if > 0
+     - cv_frac: cross validation fraction on the train set
+     - gammatones?: use gammatones instead of MFCC
+    """
     params = {'nframes_mfcc': nframes,
               'unit': unit,
               'normalize': normalize,
               'student': student,
-              'pca_whiten_mfcc_path': 'pca_'+pca_whiten+'.pickle' if pca_whiten else 0,
+              'pca_whiten_mfcc_path': 'pca_' + str(pca_whiten) + '.pickle' if pca_whiten else 0,
               'cv_frac': cv_frac,
               'theano_borrow?': BORROW,
               'use_caching?': USE_CACHING,
               'train_classifiers_1_frame?': TRAIN_CLASSIFIERS_1_FRAME,
-              'train_classifiers?': TRAIN_CLASSIFIERS}
-    with open('timit_params.json', 'w') as f:
+              'train_classifiers?': TRAIN_CLASSIFIERS,
+              'gammatones?': gammatones}
+    with open('prep_timit_params.json', 'w') as f:
         f.write(json.dumps(params))
+
+    gamma = "" # for filenames / caching
+    if gammatones:
+        gamma = "gamma_" # for filenames / caching
 
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
-                nframes=nframes, unit=unit, normalize=normalize, student=student, pca_whiten=pca_whiten)
-        with open('train_x_' + str(nframes) + '.npy', 'w') as f:
+                nframes=nframes, unit=unit, normalize=normalize, 
+                student=student, pca_whiten=pca_whiten, gammatones=gammatones)
+        with open('train_x_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_x)
-        with open('train_y_' + str(nframes) + '.npy', 'w') as f:
+        with open('train_y_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_y)
-        with open('test_x_' + str(nframes) + '.npy', 'w') as f:
+        with open('test_x_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, test_x)
-        with open('test_y_' + str(nframes) + '.npy', 'w') as f:
+        with open('test_y_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, test_y)
         print ">>> Serialized all train/test tables"
         return [train_x, train_y, test_x, test_y]
 
     if USE_CACHING:
-        try: # try to load from serialized filed, bewa
-            with open('train_x_' + str(nframes) + '.npy') as f:
+        try: # try to load from serialized filed, beware
+            with open('train_x_' + gamma + str(nframes) + '.npy') as f:
                 train_x = np.load(f)
-            with open('train_y_' + str(nframes) + '.npy') as f:
+            with open('train_y_' + gamma +  str(nframes) + '.npy') as f:
                 train_y = np.load(f)
-            with open('test_x_' + str(nframes) + '.npy') as f:
+            with open('test_x_' + gamma +  str(nframes) + '.npy') as f:
                 test_x = np.load(f)
-            with open('test_y_' + str(nframes) + '.npy') as f:
+            with open('test_y_' + gamma +  str(nframes) + '.npy') as f:
                 test_y = np.load(f)
         except: # do the whole preparation (normalization / padding)
             [train_x, train_y, test_x, test_y] = prep_and_serialize()
