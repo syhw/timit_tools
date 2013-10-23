@@ -24,11 +24,11 @@ from prep_timit import load_data
 #DATASET = '/media/bigdata/TIMIT'
 #DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
 DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split'
-N_FRAMES = 1  # HAS TO BE AN ODD NUMBER  # TODO 13
+N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
-LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
+LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 100. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_2496_units_student_timit'
+output_file_name = 'dbn_analyze_timit'
 
 
 class DBN(object):
@@ -165,9 +165,13 @@ class DBN(object):
         self.layered_classifiers = [LogisticRegression(
             input=self.sigmoid_layers[i].output,
             n_in=hidden_layers_sizes[i],
-            n_out=n_outs) for i in xrange(self.n_layers - 2)]
+            n_out=n_outs) for i in xrange(self.n_layers)]
+        self.layered_classifiers.append(LogisticRegression(
+            input=self.x,
+            n_in=n_ins,
+            n_out=n_outs)) # classifier from MFCC only (for comparison)
         self.layered_errors = [self.layered_classifiers[i].errors(self.y) 
-                for i in xrange(self.n_layers - 2)]
+                for i in xrange(len(self.layered_classifiers))]
 
 
     def pretraining_functions(self, train_set_x, batch_size, k):
@@ -222,7 +226,8 @@ class DBN(object):
 
     
     def pretraining_eval_function(self, layer, train_set_x, train_set_y,
-            valid_set_x, valid_set_y, batch_size, n_epochs=1000):
+            valid_set_x, valid_set_y, test_set_x=None, test_set_y=None,
+            batch_size=20, n_epochs=10000):
         ''' Generates all `validation_error` fns that gives the current validation error
         of a softmax classifier trained on top of the hidden layers
 
@@ -231,14 +236,17 @@ class DBN(object):
         n_train_batches /= batch_size
         n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
         n_valid_batches /= batch_size
+        n_test_batches = None
+        if test_set_x != None and test_set_y != None:
+            n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+            n_test_batches /= batch_size
         index = T.lscalar('index')  # index to a [mini]batch
-        learning_rate = 0.1 # TODO
+        learning_rate = 0.01 # TODO try others
 
         # gradient
-        g_W = T.grad(cost=self.layered_classifiers[layer].negative_log_likelihood(self.y),
-                wrt=self.layered_classifiers[layer].W)
-        g_b = T.grad(cost=self.layered_classifiers[layer].negative_log_likelihood(self.y),
-                wrt=self.layered_classifiers[layer].b)
+        cost = self.layered_classifiers[layer].negative_log_likelihood(self.y)
+        g_W = T.grad(cost=cost, wrt=self.layered_classifiers[layer].W)
+        g_b = T.grad(cost=cost, wrt=self.layered_classifiers[layer].b)
         # updates
         updates = OrderedDict([(self.layered_classifiers[layer].W, 
                     self.layered_classifiers[layer].W - learning_rate * g_W),
@@ -252,38 +260,51 @@ class DBN(object):
                                               (index + 1) * batch_size],
                           self.y: train_set_y[index * batch_size:
                                               (index + 1) * batch_size]})
-        valid_score_i = theano.function([index], self.layered_errors[layer],
+        valid_error_i = theano.function([index], self.layered_errors[layer],
               givens={self.x: valid_set_x[index * batch_size:
                                           (index + 1) * batch_size],
                       self.y: valid_set_y[index * batch_size:
                                           (index + 1) * batch_size]})
+        test_error_i = None
+        if test_set_x != None and test_set_y != None:
+            test_error_i = theano.function([index], self.layered_errors[layer],
+                  givens={self.x: test_set_x[index * batch_size:
+                                              (index + 1) * batch_size],
+                          self.y: test_set_y[index * batch_size:
+                                              (index + 1) * batch_size]})
 
-        # gradient descent iterations
-        patience = 10000
-        patience_increase = 2
-        improvement_threshold = 0.995
-        best_valid_score = numpy.inf
-        iter = 0
-        epoch = 0
-        best_params = None
-        while (epoch < n_epochs):
-            epoch = epoch + 1
-            for minibatch_index in xrange(n_train_batches):
-                minibatch_avg_cost = train_logistic_regr_i(minibatch_index)
-                iter = epoch * n_train_batches + minibatch_index
-            valid_score = numpy.mean([valid_score_i(i) for i in xrange(n_valid_batches)])    
-            if valid_score < best_valid_score:
-                if valid_score < best_valid_score * improvement_threshold:
-                    patience = max(patience, iter * patience_increase)
-                best_valid_score = valid_score
-                best_params = (self.layered_classifiers[layer].W,
-                        self.layered_classifiers[layer].b)
-            # could add the test score here TODO
-            if patience <= iter:
-                break
-        (self.layered_classifiers[layer].W, self.layered_classifiers[layer].b) = best_params
 
-        return [valid_score_i(i) for i in xrange(n_valid_batches)]
+        def valid_error_fn():
+            print 'training a LogisticRegression on top of layer', layer
+            # gradient descent iterations
+            patience = 10000
+            patience_increase = 2
+            improvement_threshold = 0.995
+            best_valid_error = 2.
+            iter = 0
+            epoch = 0
+            best_params = None
+            while (epoch < n_epochs):
+                epoch = epoch + 1
+                for minibatch_index in xrange(n_train_batches):
+                    minibatch_avg_cost = train_logistic_regr_i(minibatch_index)
+                    iter = epoch * n_train_batches + minibatch_index
+                valid_error = numpy.mean([valid_error_i(i) for i in xrange(n_valid_batches)])    
+                if valid_error < best_valid_error:
+                    if valid_error < best_valid_error * improvement_threshold:
+                        patience = max(patience, iter * patience_increase)
+                    best_valid_error = valid_error
+                    best_params = (self.layered_classifiers[layer].W,
+                            self.layered_classifiers[layer].b)
+                if patience <= iter:
+                    break
+            (self.layered_classifiers[layer].W, self.layered_classifiers[layer].b) = best_params
+            test_error = 'not computed'
+            if test_set_x != None and test_set_y != None:
+                test_error = numpy.mean([test_error_i(i) for i in xrange(n_test_batches)])
+            return (best_valid_error, test_error)
+
+        return valid_error_fn
 
 
     def build_finetune_functions(self, datasets, batch_size, learning_rate):
@@ -321,7 +342,7 @@ class DBN(object):
         gparams = T.grad(self.finetune_cost, self.params)
 
         # compute list of fine-tuning updates
-        updates = {}
+        updates = OrderedDict()
         for param, gparam in zip(self.params, gparams):
             updates[param] = param - gparam * learning_rate
 
@@ -356,9 +377,9 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.01, pretraining_epochs=100, # TODO 100+
-             pretrain_lr=0.01, k=1, training_epochs=100, # TODO 100+
-             dataset=DATASET, batch_size=20):
+def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
+             pretrain_lr=0.001, k=1, training_epochs=100, # TODO 100+
+             dataset=DATASET, batch_size=20, dbn_load_from=''): # TODO k=2+
     """
 
     :type learning_rate: float
@@ -379,8 +400,7 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=100, # TODO 100+
 
     print "loading dataset from", dataset
     ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.0)
-#    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=False, cv_frac=0.1) 
-    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.1) 
+    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.12, dataset_name='TIMIT')
     # unit=False because we don't want the [0-1] binary RBM projection
     # normalize=True because we want the data to be 0 centered with 1 variance.
     # pca_whiten=True because we want the data to be decorrelated
@@ -403,26 +423,38 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=100, # TODO 100+
     print "train_set_x.shape.eval()", train_set_x.shape.eval()
     assert(train_set_x.shape[1].eval() == N_FRAMES * 39) # check
     dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1].eval(),
-              hidden_layers_sizes=[2496, 2496, 2496],
+              hidden_layers_sizes=[1248, 1248, 1248],
               n_outs=62 * 3)
 
     #########################
     # PRETRAINING THE MODEL #
     #########################
-    print '... getting the pretraining functions'
-    pretraining_fns = dbn.pretraining_functions(train_set_x=train_set_x,
-                                                batch_size=batch_size,
-                                                k=k)
-    pretraining_eval_fns = [dbn.pretraining_eval_function(layer=i,
+    print '... evaluating on MFCC only, error rate of a LogisticRegression:'
+    on_top_of_MFCC_fn = dbn.pretraining_eval_function(layer=-1,
                                                 train_set_x=train_set_x,
                                                 train_set_y=train_set_y,
                                                 valid_set_x=valid_set_x,
                                                 valid_set_y=valid_set_y,
+                                                test_set_x=test_set_x,
+                                                test_set_y=test_set_y,
                                                 batch_size=batch_size)
-                                        for i in xrange(dbn.n_layers - 2)]
+
+    print 'error rate:', on_top_of_MFCC_fn()
+    print '... getting the pretraining functions'
+    pretraining_fns = dbn.pretraining_functions(train_set_x=train_set_x,
+                                                batch_size=batch_size,
+                                                k=k)
+    pretraining_eval_fns = [dbn.pretraining_eval_function(layer=ii,
+                                                train_set_x=train_set_x,
+                                                train_set_y=train_set_y,
+                                                valid_set_x=valid_set_x,
+                                                valid_set_y=valid_set_y,
+                                                test_set_x=test_set_x,
+                                                test_set_y=test_set_y,
+                                                batch_size=batch_size)
+                                        for ii in xrange(dbn.n_layers)]
 
     print '... pre-training the model'
-
     start_time = time.clock()
     ## Pre-train layer-wise
     for i in xrange(dbn.n_layers):
@@ -438,8 +470,9 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=100, # TODO 100+
             print 'Pre-training layer %i, epoch %d, cost ' % (i, epoch),
             print numpy.mean(c)
             ##############################
-            print 'cross-val scores of LogisticRegression on top of the hidden layers',
-            print pretraining_eval_fns[i]()
+            print('>>> (cross_val, test) error rates of LogisticRegression on top of the hidden layer %d is' % i)
+            print (pretraining_eval_fns[i]())
+            # TODO stop pretraining when this error rate goes up (early stopping)
             ##############################
         with open(output_file_name + '_layer_' + str(i) + '.pickle', 'w') as f:
             cPickle.dump(dbn, f)
@@ -453,17 +486,19 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=100, # TODO 100+
     ########################
     # FINETUNING THE MODEL #
     ########################
-    #with open('dbn_Gaussian_gpu_layer_2.pickle') as f:
+    if dbn_load_from != '':
+        with open(dbn_load_from) as f:
+            dbn = cPickle.load(f)
+        print 'loaded this dbn:', dbn_load_from
+    #with open(output_file_name + '_layer_2.pickle') as f:
     #    dbn = cPickle.load(f)
 
-    ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, cv_frac=0.2) 
-    ### # unit=False because we don't want the [0-1] binary RBM projection
-    ### # normalize=True because we want the data to be 0 centered with 1 variance.
-    ###train_set_x, train_set_y, valid_set_x, valid_set_y, test_set_x, test_set_y = None, None, None, None, None, None
-    ###train_set_x, train_set_y = datasets[0]
-    ###valid_set_x, valid_set_y = datasets[1] 
-    ###test_set_x, test_set_y = datasets[2]
-    ###n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
+    #datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.2, dataset_name='TIMIT')
+    #train_set_x, train_set_y, valid_set_x, valid_set_y, test_set_x, test_set_y = None, None, None, None, None, None
+    #train_set_x, train_set_y = datasets[0]
+    #valid_set_x, valid_set_y = datasets[1] 
+    #test_set_x, test_set_y = datasets[2]
+    #n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
 
     # get the training, validation and testing function for the model
     print '... getting the finetuning functions'
@@ -507,6 +542,11 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=100, # TODO 100+
                 print('epoch %i, minibatch %i/%i, validation error %f %%' % \
                       (epoch, minibatch_index + 1, n_train_batches,
                        this_validation_loss * 100.))
+                ##############################
+                for layer_ind in xrange(dbn.n_layers):
+                    print('>>> (cross-val, test) error rate of a LogisticRegression on top of layer %d is' % layer_ind)
+                    print(pretraining_eval_fns[layer_ind]())
+                ##############################
 
                 # if we got the best validation score until now
                 if this_validation_loss < best_validation_loss:
@@ -547,4 +587,22 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=100, # TODO 100+
 
 
 if __name__ == '__main__':
-    test_DBN()
+    if len(sys.argv) > 1:
+        usage = """usage: python DBN_analyze_timit $pretrain_lr $pretrain_epochs $finetune_lr $finetune_epochs $k(for_CD) [dbn_load_from.pickle]"""
+        print usage
+        load_from = ''
+        if len(sys.argv) > 6:
+            load_from = sys.argv[6]
+        plr, pep, flr, fep, k = sys.argv[1:6]
+        plr = float(plr)
+        pep = int(pep)
+        flr = float(flr)
+        fep = int(fep)
+        k = int(k)
+        tmp = '_plr%.1E_pep%d_flr%.1E_fep_%d_k%d' % (plr, pep, flr, fep, k)
+        output_file_name = output_file_name + tmp
+        train_DBN(finetune_lr=flr, pretraining_epochs=pep,
+             pretrain_lr=plr, k=k, training_epochs=fep,
+             dataset=DATASET, batch_size=20, dbn_load_from=load_from)
+    else:
+        train_DBN()
