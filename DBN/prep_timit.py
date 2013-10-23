@@ -1,7 +1,6 @@
 import theano, copy, sys, json, cPickle
 import theano.tensor as T
 import numpy as np
-np.set_printoptions(threshold='nan')
 
 BORROW = True # True makes it faster with the GPU
 USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
@@ -69,63 +68,33 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, 
         print "*** training a linear discriminant classifier ***"
         from sklearn.lda import LDA
         from sklearn.metrics import confusion_matrix
-        import pylab as pl
-        lda = LDA()
-        if articulatory:
-            lda.fit(train_x[:,:39*nframes_mfcc], train_y_f, store_covariance=True)
-            print "with MFCC only (train):", lda.score(train_x[:,:39*nframes_mfcc], train_y_f)
-            print "with MFCC only (test):", lda.score(test_x[:,:39*nframes_mfcc], test_y_f)
-            y_pred_mfcc = lda.predict(test_x[:,:39*nframes_mfcc])
-            from sklearn import cross_validation
-            X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y_f, test_size=0.2, random_state=0)
-            lda.fit(X_train[:,:39*nframes_mfcc], y_train)
-            print "with MFCC only (validation):", lda.score(X_validate[:,:39*nframes_mfcc], y_validate)
-            lda2 = LDA()
-            print train_x.shape
-            print 39*nframes_mfcc
-            lda2.fit(train_x[:,39*nframes_mfcc:], train_y_f, store_covariance=True)
-            print "with arti only (train):", lda2.score(train_x[:,39*nframes_mfcc:], train_y_f)
-            print "with arti only (test):", lda2.score(test_x[:,39*nframes_mfcc:], test_y_f)
-            y_pred_arti = lda2.predict(test_x[:,39*nframes_mfcc:])
-            lda2.fit(X_train[:,39*nframes_mfcc:], y_train)
-            print "with arti only (validation):", lda2.score(X_validate[:,39*nframes_mfcc:], y_validate)
-            with open(dataset_name + '_lda_classif_mfcc_arti.pickle', 'w') as f:
-                cPickle.dump((lda, lda2), f)
+        from sklearn import cross_validation
 
-            # Compute confusion matrix
-            cm_mfcc = confusion_matrix(test_y_f, y_pred_mfcc)
-            cm_arti = confusion_matrix(test_y_f, y_pred_arti)
-            with open("cm_mfcc.txt", 'w') as wf:
-                print >> wf, cm_mfcc
-            with open("cm_arti.txt", 'w') as wf:
-                print >> wf, cm_arti
-            # Show confusion matrix in a separate window
-#            pl.matshow(cm_mfcc)
-#            pl.title('Confusion matrix MFCC')
-#            pl.colorbar()
-#            pl.ylabel('True label')
-#            pl.xlabel('Predicted label')
-#            pl.savefig('cm_mfcc.png')
-#            pl.matshow(cm_arti)
-#            pl.title('Confusion matrix ARTICULATORY')
-#            pl.colorbar()
-#            pl.ylabel('True label')
-#            pl.xlabel('Predicted label')
-#            pl.savefig('cm_arti.png')
-        else:
-            lda.fit(train_x, train_y_f, store_covariance=True)
-            print "LDA score (train):", lda.score(train_x, train_y_f)
-            print "LDA score (test):", lda.score(test_x, test_y_f)
-            with open(dataset_name + '_lda_classif.pickle', 'w') as f:
+        def lda_on(train_x, train_y, test_x, test_y, feats_name='all_features'):
+            lda = LDA()
+            lda.fit(train_x, train_y, store_covariance=True)
+            print feats_name, "(train):", lda.score(train_x, train_y)
+            print feats_name, "(test):", lda.score(test_x, test_y)
+            with open(dataset_name + '_lda_classif_' + feats_name + '.pickle', 'w') as f:
                 cPickle.dump(lda, f)
             y_pred = lda.predict(test_x)
-            cm = confusion_matrix(test_y_f, y_pred)
-            with open("cm_all.txt", 'w') as wf:
-                print >> wf, cm
-            from sklearn import cross_validation
-            X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y_f, test_size=0.2, random_state=0)
+            X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=0.2, random_state=0)
             lda.fit(X_train, y_train)
-            print "LDA score (validation):", lda.score(X_validate, y_validate)
+            print feats_name, "(validation):", lda.score(X_validate, y_validate)
+            y_pred_valid = lda.predict(X_validate)
+            cm_test = confusion_matrix(test_y, y_pred)
+            cm_valid = confusion_matrix(y_validate, y_pred_valid)
+            np.set_printoptions(threshold='nan')
+            with open("cm_test" + feats_name + ".txt", 'w') as wf:
+                print >> wf, cm_test
+            with open("cm_valid" + feats_name + ".txt", 'w') as wf:
+                print >> wf, cm_valid
+
+        if articulatory:
+            lda_on(train_x[:,:39*nframes_mfcc], train_y_f, test_x[:,:39*nframes_mfcc], test_y_f, feats_name='mfcc')
+            lda_on(train_x[:,39*nframes_mfcc:], train_y_f, test_x[:,39*nframes_mfcc:], test_y_f, feats_name='arti')
+        else:
+            lda_on(train_x, train_y_f, test_x, test_y_f, feats_name='both')
 
     if 'featselec' in classifiers:
         ### Feature selection
