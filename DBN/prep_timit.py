@@ -1,11 +1,12 @@
 import theano, copy, sys, json, cPickle
 import theano.tensor as T
 import numpy as np
+np.set_printoptions(threshold='nan')
 
 BORROW = True # True makes it faster with the GPU
 USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
-TRAIN_CLASSIFIERS = True # train sklearn classifiers to compare the DBN to
+TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
 
 def padding(nframes, x, y):
     # dirty hacky padding
@@ -37,74 +38,122 @@ def padding(nframes, x, y):
                     'constant', constant_values=(0,0))
     return x_f
 
-def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False):
+def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, dataset_name='', classifiers=['lda'], nframes_mfcc=1):
+    print("size of input layer (== dimension of the features space) %d" % train_x.shape[1])
     ### Training a SVM to compare results TODO
     #print "training a SVM" TODO
+    if 'sgd' in classifiers:
+        ### Training a linear model (elasticnet) to compare results
+        print("*** training a linear model with SGD ***")
+        from sklearn import linear_model
+        from sklearn.cross_validation import cross_val_score
+        clf = linear_model.SGDClassifier(loss='modified_huber', penalty='elasticnet') # TODO change and CV params
+        clf.fit(train_x, train_y_f)
+        scores = cross_val_score(clf, test_x, test_y_f)
+        print "score linear classifier (elasticnet, SGD trained)", scores.mean()
+        with open('linear_elasticnet_classif.pickle', 'w') as f:
+            cPickle.dump(clf, f)
 
-    ### Training a linear model (elasticnet) to compare results
-    print("*** training a linear model with SGD ***")
-    from sklearn import linear_model
-    from sklearn.cross_validation import cross_val_score
-    clf = linear_model.SGDClassifier(loss='modified_huber', penalty='elasticnet') # TODO change and CV params
-    clf.fit(train_x, train_y_f)
-    scores = cross_val_score(clf, test_x, test_y_f)
-    print "score linear classifier (elasticnet, SGD trained)", scores.mean()
-    with open('linear_elasticnet_classif.pickle', 'w') as f:
-        cPickle.dump(clf, f)
+    if 'rf' in classifiers:
+        ### Training a random forest to compare results
+        print("*** training a random forest ***")
+        from sklearn.ensemble import RandomForestClassifier
+        clf2 = RandomForestClassifier(n_jobs=-1, max_features='log2', min_samples_split=3) # TODO change and CV params
+        clf2.fit(train_x, train_y_f)
+        scores2 = cross_val_score(clf2, test_x, test_y_f)
+        print "score random forest", scores2.mean()
+        ###with open('random_forest_classif.pickle', 'w') as f: TODO TODO TODO
+        ###    cPickle.dump(clf2, f)  TODO TODO TODO 
 
-    ### Training a random forest to compare results
-    print("*** training a random forest ***")
-    from sklearn.ensemble import RandomForestClassifier
-    clf2 = RandomForestClassifier(n_jobs=-1, max_features='log2', min_samples_split=3) # TODO change and CV params
-    clf2.fit(train_x, train_y_f)
-    scores2 = cross_val_score(clf2, test_x, test_y_f)
-    print "score random forest", scores2.mean()
-    ###with open('random_forest_classif.pickle', 'w') as f: TODO TODO TODO
-    ###    cPickle.dump(clf2, f)  TODO TODO TODO 
+    if 'lda' in classifiers:
+        print "*** training a linear discriminant classifier ***"
+        from sklearn.lda import LDA
+        from sklearn.metrics import confusion_matrix
+        import pylab as pl
+        lda = LDA()
+        if articulatory:
+            lda.fit(train_x[:,:39*nframes_mfcc], train_y_f, store_covariance=True)
+            print "with MFCC only (train):", lda.score(train_x[:,:39*nframes_mfcc], train_y_f)
+            print "with MFCC only (test):", lda.score(test_x[:,:39*nframes_mfcc], test_y_f)
+            y_pred_mfcc = lda.predict(test_x[:,:39*nframes_mfcc])
+            from sklearn import cross_validation
+            X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y_f, test_size=0.2, random_state=0)
+            lda.fit(X_train[:,:39*nframes_mfcc], y_train)
+            print "with MFCC only (validation):", lda.score(X_validate[:,:39*nframes_mfcc], y_validate)
+            lda2 = LDA()
+            print train_x.shape
+            print 39*nframes_mfcc
+            lda2.fit(train_x[:,39*nframes_mfcc:], train_y_f, store_covariance=True)
+            print "with arti only (train):", lda2.score(train_x[:,39*nframes_mfcc:], train_y_f)
+            print "with arti only (test):", lda2.score(test_x[:,39*nframes_mfcc:], test_y_f)
+            y_pred_arti = lda2.predict(test_x[:,39*nframes_mfcc:])
+            lda2.fit(X_train[:,39*nframes_mfcc:], y_train)
+            print "with arti only (validation):", lda2.score(X_validate[:,39*nframes_mfcc:], y_validate)
+            with open(dataset_name + '_lda_classif_mfcc_arti.pickle', 'w') as f:
+                cPickle.dump((lda, lda2), f)
 
-    print "*** training a linear discriminant classifier ***"
-    from sklearn.lda import LDA
-    lda = LDA()
-    if articulatory:
-        lda.fit(train_x[:,:39], train_y_f, store_covariance=True)
-        print "with MFCC only:", lda.score(test_x[:,:39], test_y_f)
-        lda2 = LDA()
-        lda2.fit(train_x[:,:39], train_y_f, store_covariance=True)
-        print "with arti only:", lda2.score(test_x[:,39:], test_y_f)
-        with open('lda_classif_mfcc_arti.pickle', 'w') as f:
-            cPickle.dump((lda, lda2), f)
-    else:
-        lda.fit(train_x, train_y_f, store_covariance=True)
-        print "LDA score:", lda.score(test_x, test_y_f)
-        with open('lda_classif.pickle', 'w') as f:
-            cPickle.dump(lda, f)
+            # Compute confusion matrix
+            cm_mfcc = confusion_matrix(test_y_f, y_pred_mfcc)
+            cm_arti = confusion_matrix(test_y_f, y_pred_arti)
+            with open("cm_mfcc.txt", 'w') as wf:
+                print >> wf, cm_mfcc
+            with open("cm_arti.txt", 'w') as wf:
+                print >> wf, cm_arti
+            # Show confusion matrix in a separate window
+#            pl.matshow(cm_mfcc)
+#            pl.title('Confusion matrix MFCC')
+#            pl.colorbar()
+#            pl.ylabel('True label')
+#            pl.xlabel('Predicted label')
+#            pl.savefig('cm_mfcc.png')
+#            pl.matshow(cm_arti)
+#            pl.title('Confusion matrix ARTICULATORY')
+#            pl.colorbar()
+#            pl.ylabel('True label')
+#            pl.xlabel('Predicted label')
+#            pl.savefig('cm_arti.png')
+        else:
+            lda.fit(train_x, train_y_f, store_covariance=True)
+            print "LDA score (train):", lda.score(train_x, train_y_f)
+            print "LDA score (test):", lda.score(test_x, test_y_f)
+            with open(dataset_name + '_lda_classif.pickle', 'w') as f:
+                cPickle.dump(lda, f)
+            y_pred = lda.predict(test_x)
+            cm = confusion_matrix(test_y_f, y_pred)
+            with open("cm_all.txt", 'w') as wf:
+                print >> wf, cm
+            from sklearn import cross_validation
+            X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y_f, test_size=0.2, random_state=0)
+            lda.fit(X_train, y_train)
+            print "LDA score (validation):", lda.score(X_validate, y_validate)
 
-    ### Feature selection
-    print("*** feature selection now: ***")
-    print(" - Feature importances for the random forest classifier")
-    print clf2.feature_importances_
-    from sklearn.feature_selection import SelectPercentile, f_classif 
-    # SelectKBest TODO?
-    selector = SelectPercentile(f_classif, percentile=10) # ANOVA
-    selector.fit(train_x, train_y_f)
-    print selector.pvalues_
-    scores = -np.log10(selector.pvalues_)
-    scores /= scores.max()
-    print(" - ANOVA scoring (order of the MFCC)")
-    print scores
-    from sklearn.feature_selection import RFECV
-    print(" - Recursive feature elimination with cross-validation with LDA")
-    lda = LDA()
-    rfecv = RFECV(estimator=lda, step=1, scoring='accuracy')
-    rfecv.fit(train_x, train_y_f)
-    print("Optimal number of features : %d" % rfecv.n_features_)
-    print("Ranking (order of the MFCC):")
-    print rfecv.ranking_
-    # TODO sample features combinations with LDA? kernels?
+    if 'featselec' in classifiers:
+        ### Feature selection
+        print("*** feature selection now: ***")
+        print(" - Feature importances for the random forest classifier")
+        print clf2.feature_importances_
+        from sklearn.feature_selection import SelectPercentile, f_classif 
+        # SelectKBest TODO?
+        selector = SelectPercentile(f_classif, percentile=10) # ANOVA
+        selector.fit(train_x, train_y_f)
+        print selector.pvalues_
+        scores = -np.log10(selector.pvalues_)
+        scores /= scores.max()
+        print(" - ANOVA scoring (order of the MFCC)")
+        print scores
+        from sklearn.feature_selection import RFECV
+        print(" - Recursive feature elimination with cross-validation with LDA")
+        lda = LDA()
+        rfecv = RFECV(estimator=lda, step=1, scoring='accuracy')
+        rfecv.fit(train_x, train_y_f)
+        print("Optimal number of features : %d" % rfecv.n_features_)
+        print("Ranking (order of the MFCC):")
+        print rfecv.ranking_
+        # TODO sample features combinations with LDA? kernels?
 
 
 def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False, 
-              pca_whiten=0, gammatones=False):
+              pca_whiten=0, gammatones=False, dataset_name=''):
     # TODO "standard split" as in /fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split
     # normalize takes precedence over student's t-stat
     xname = "xdata"
@@ -151,7 +200,7 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
             pca = PCA(n_components='mle', whiten=True)
         train_x = pca.fit_transform(train_x)
         test_x = pca.transform(test_x)
-        with open('pca_' + xname + '.pickle', 'w') as f:
+        with open(dataset_name + '_pca_' + xname + '.pickle', 'w') as f:
             cPickle.dump(pca, f)
     train_x_f = train_x
     test_x_f = test_x
@@ -167,7 +216,7 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
     c = Counter(train_y)
     to_int = dict([(k, c.keys().index(k)) for k in c.iterkeys()])
     to_state = dict([(c.keys().index(k), k) for k in c.iterkeys()])
-    with open('to_int_and_to_state_dicts_tuple.pickle', 'w') as f:
+    with open(dataset_name + '_to_int_and_to_state_dicts_tuple.pickle', 'w') as f:
         cPickle.dump((to_int, to_state), f)
 
     print "preparing / int mapping Ys"
@@ -180,12 +229,14 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
         test_y_f[i] = to_int[e]
 
     if TRAIN_CLASSIFIERS_1_FRAME:
-        train_classifiers(train_x, train_y_f, test_x, test_y_f) # ONLY 1 FRAME
+        train_classifiers(train_x, train_y_f, test_x, test_y_f, dataset_name=dataset_name) # ONLY 1 FRAME
+    if TRAIN_CLASSIFIERS:
+        train_classifiers(train_x_f, train_y_f, test_x_f, test_y_f, dataset_name=dataset_name, nframes_mfcc=nframes)
 
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
 
-def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, pca_whiten=0, cv_frac=0.2, gammatones=False):
+def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, pca_whiten=0, cv_frac=0.2, gammatones=False, dataset_name='timit'):
     """ 
     params:
      - dataset: folder
@@ -207,8 +258,9 @@ def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, p
               'use_caching?': USE_CACHING,
               'train_classifiers_1_frame?': TRAIN_CLASSIFIERS_1_FRAME,
               'train_classifiers?': TRAIN_CLASSIFIERS,
-              'gammatones?': gammatones}
-    with open('prep_timit_params.json', 'w') as f:
+              'gammatones?': gammatones,
+              'dataset_name': dataset_name}
+    with open('prep_' + dataset_name + '_params.json', 'w') as f:
         f.write(json.dumps(params))
 
     gamma = "" # for filenames / caching
@@ -218,27 +270,28 @@ def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, p
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
                 nframes=nframes, unit=unit, normalize=normalize, 
-                student=student, pca_whiten=pca_whiten, gammatones=gammatones)
-        with open('train_x_' + gamma + str(nframes) + '.npy', 'w') as f:
+                student=student, pca_whiten=pca_whiten, gammatones=gammatones,
+                dataset_name=dataset_name)
+        with open('train_x_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_x)
-        with open('train_y_' + gamma + str(nframes) + '.npy', 'w') as f:
+        with open('train_y_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_y)
-        with open('test_x_' + gamma + str(nframes) + '.npy', 'w') as f:
+        with open('test_x_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, test_x)
-        with open('test_y_' + gamma + str(nframes) + '.npy', 'w') as f:
+        with open('test_y_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, test_y)
         print ">>> Serialized all train/test tables"
         return [train_x, train_y, test_x, test_y]
 
     if USE_CACHING:
         try: # try to load from serialized filed, beware
-            with open('train_x_' + gamma + str(nframes) + '.npy') as f:
+            with open('train_x_' + dataset_name + '_' + gamma + str(nframes) + '.npy') as f:
                 train_x = np.load(f)
-            with open('train_y_' + gamma +  str(nframes) + '.npy') as f:
+            with open('train_y_' + dataset_name + '_' + gamma +  str(nframes) + '.npy') as f:
                 train_y = np.load(f)
-            with open('test_x_' + gamma +  str(nframes) + '.npy') as f:
+            with open('test_x_' + dataset_name + '_' + gamma +  str(nframes) + '.npy') as f:
                 test_x = np.load(f)
-            with open('test_y_' + gamma +  str(nframes) + '.npy') as f:
+            with open('test_y_' + dataset_name + '_' + gamma +  str(nframes) + '.npy') as f:
                 test_y = np.load(f)
         except: # do the whole preparation (normalization / padding)
             [train_x, train_y, test_x, test_y] = prep_and_serialize()

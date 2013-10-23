@@ -104,10 +104,14 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
     ### Labels (Ys)
     from collections import Counter
     c = Counter(train_y)
+    print c
     to_int = dict([(k, c.keys().index(k)) for k in c.iterkeys()])
     to_state = dict([(c.keys().index(k), k) for k in c.iterkeys()])
-    with open('to_int_and_to_state_dicts_tuple_mocha.pickle', 'w') as f:
+    with open('to_int_and_to_state_dicts_tuple_mocha.pickle', 'wb') as f:
         cPickle.dump((to_int, to_state), f)
+        print to_int
+        print to_state
+        print "dumped to_int / to_state"
 
     print "preparing / int mapping Ys"
     train_y_f = np.zeros(train_y.shape[0], dtype='int32')
@@ -121,8 +125,11 @@ def prep_data(dataset, nframes_mfcc=1, nframes_arti=1, unit=False,
     ret_train_x = np.concatenate([train_x_f_mfcc, train_x_f_arti], axis=1)
     ret_test_x = np.concatenate([test_x_f_mfcc, test_x_f_arti], axis=1)
 
-    if TRAIN_CLASSIFIERS:
+    if TRAIN_CLASSIFIERS_1_FRAME:
         train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=True) # ONLY 1 FRAME
+    if TRAIN_CLASSIFIERS:
+        train_classifiers(ret_train_x, train_y_f, ret_test_x, test_y_f, articulatory=True, nframes_mfcc=nframes_mfcc)
+        train_classifiers(ret_train_x, train_y_f, ret_test_x, test_y_f, articulatory=False, nframes_mfcc=nframes_mfcc)
 
     return ([ret_train_x, train_y_f, ret_test_x, test_y_f], n_mfcc, n_arti)
 
@@ -144,6 +151,8 @@ def load_data(dataset, nframes_mfcc=11, nframes_arti=5,
               'train_classifiers?': TRAIN_CLASSIFIERS}
     with open('mocha_timit_params.json', 'w') as f:
         f.write(json.dumps(params))
+    n_mfcc = 39 # default
+    n_arti = 60 # default
 
     def prep_and_serialize():
         ([train_x, train_y, test_x, test_y], n_mfcc, n_arti) = prep_data(
