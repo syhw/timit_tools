@@ -26,7 +26,7 @@ N_FRAMES_MFCC = 11  # HAS TO BE AN ODD NUMBER
 N_FRAMES_ARTI = 7  # HAS TO BE AN ODD NUMBER
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_mocha_gpu'
+output_file_name = 'dbn_2496_mocha_gpu'
 
 
 class DBN(object):
@@ -306,9 +306,9 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.05, pretraining_epochs=10, # TODO 100+
-             pretrain_lr=0.05, k=1, training_epochs=42, # TODO 100+
-             dataset=DATASET, batch_size=10):
+def test_DBN(finetune_lr=0.05, pretraining_epochs=100, # TODO 100+
+             pretrain_lr=0.05, k=1, training_epochs=100, # TODO 100+
+             dataset=DATASET, batch_size=50):
     """
 
     :type learning_rate: float

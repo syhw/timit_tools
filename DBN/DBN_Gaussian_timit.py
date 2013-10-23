@@ -22,11 +22,11 @@ from prep_timit import load_data
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
 DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
-N_FRAMES = 11  # HAS TO BE AN ODD NUMBER 
+N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_k1_timit_yasser'
+output_file_name = 'dbn_2496_units_student_timit'
 
 
 class DBN(object):
@@ -278,9 +278,9 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100+
+def test_DBN(finetune_lr=0.01, pretraining_epochs=10, # TODO 100+
              pretrain_lr=0.1, k=1, training_epochs=100, # TODO 100+
-             dataset=DATASET, batch_size=20):
+             dataset=DATASET, batch_size=10):
     """
 
     :type learning_rate: float
@@ -301,7 +301,8 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100+
 
     print "loading dataset from", dataset
     ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.0)
-    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=False, cv_frac=0.1) 
+#    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=False, cv_frac=0.1) 
+    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.1) 
     # unit=False because we don't want the [0-1] binary RBM projection
     # normalize=True because we want the data to be 0 centered with 1 variance.
     # pca_whiten=True because we want the data to be decorrelated
@@ -324,7 +325,7 @@ def test_DBN(finetune_lr=0.1, pretraining_epochs=10, # TODO 100+
     print "train_set_x.shape.eval()", train_set_x.shape.eval()
     assert(train_set_x.shape[1].eval() == N_FRAMES * 39) # check
     dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1].eval(),
-              hidden_layers_sizes=[960, 960, 960],
+              hidden_layers_sizes=[2496, 2496, 2496],
               n_outs=62 * 3)
 
     #########################
