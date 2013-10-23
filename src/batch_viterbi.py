@@ -34,7 +34,7 @@ SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
 epsilon = 1E-5 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
-N_BATCHES_DATASET = 10 # number of batches in which we divide the dataset 
+N_BATCHES_DATASET = 8 # number of batches in which we divide the dataset 
                       # (to fit in the GPU memory, only 2Gb at home)
 
 class Phone:
@@ -119,7 +119,7 @@ def padding(nframes, x):
     return x_f
 
 
-def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
+def compute_likelihoods_dbn(dbn, mat, depth=np.iinfo(int).max, normalize=True, unit=False):
     """ compute the log-likelihoods of each states i according to the Deep 
     Belief Network (stacked RBMs) in dbn, for each line of mat (input data) 
     depth is the depth of the DBN at which the likelihoods will pop out,
@@ -138,35 +138,26 @@ def compute_likelihoods_dbn(dbn, mat, depth=None, normalize=True, unit=False):
     from theano import shared#, scan
     # propagating through the deep belief net
     batch_size = mat.shape[0] / N_BATCHES_DATASET
-    out_ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
     max_layer = dbn.n_layers
-    if depth != None:
+    out_ret = None
+    if depth < dbn.n_layers:
         max_layer = min(dbn.n_layers, depth)
+        print max_layer
         out_ret = np.ndarray((mat.shape[0], dbn.rbm_layers[max_layer].W.shape[1].eval()), dtype="float32")
+    else:
+        out_ret = np.ndarray((mat.shape[0], dbn.logLayer.b.shape[0].eval()), dtype="float32")
 
     for ind in xrange(0, mat.shape[0]+1, batch_size):
         output = shared(mat[ind:ind+batch_size])
         print "evaluating the DBN on all the test input"
         for layer_ind in xrange(max_layer):
             [pre, output] = dbn.rbm_layers[layer_ind].propup(output)
-        if depth == None:
-
-            ### TODO REMOVE
+        if depth >= dbn.n_layers:
             print "dbn output shape", output.shape.eval()
-            #print "dbn output", output.eval()
-###            try:
-###                with open('curr_last_rbm_output.npy', 'r') as f:
-###                    tmp = np.load(f)
-###            except:
-###                tmp = np.ndarray(output.shape.eval(), dtype='float32')
-###            with open('curr_last_rbm_output.npy', 'w') as f:
-###                tmp2 = np.concatenate([tmp, output.eval()], axis=0)
-###                np.save(f, tmp2)
-
             ret = T.nnet.softmax(T.dot(output, dbn.logLayer.W) + dbn.logLayer.b)
             out_ret[ind:ind+batch_size] = T.log(ret).eval()
         else:
-            out_ret[ind:ind+batch_size] = output.eval()
+            out_ret[ind:ind+batch_size] = T.log(output).eval()
     return out_ret
 
 
@@ -707,6 +698,8 @@ def process(ofname, iscpfname, ihmmfname,
         if VERBOSE:
             print tmp_likelihoods
             print tmp_likelihoods.shape
+        print map_states_to_phones
+        print dbn_phones_to_states
         columns_remapping = [dbn_phones_to_states[map_states_to_phones[i]] for i in xrange(tmp_likelihoods.shape[1])]
         if VERBOSE:
             print columns_remapping

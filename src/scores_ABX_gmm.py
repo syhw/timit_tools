@@ -43,6 +43,7 @@ class InnerLoop(object): # to circumvent pickling pbms w/ multiprocessing.map
                                    self.map_states_to_phones,
                                    using_bigram=self.using_bigram)
         assert(not (posteriorgrams == np.NaN).any())
+        assert(not (posteriorgrams == 0).all())
         assert(not (self.likelihoods[0][start:end] == np.NaN).any())
         self.write_file(mfcc_file, start, end, posteriorgrams)
     def write_file(self, mfcc_file, start, end, posteriorgrams):
