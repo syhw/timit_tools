@@ -34,7 +34,7 @@ SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
 epsilon = 1E-5 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
-N_BATCHES_DATASET = 4 # number of batches in which we divide the dataset 
+N_BATCHES_DATASET = 10 # number of batches in which we divide the dataset 
                       # (to fit in the GPU memory, only 2Gb at home)
 
 class Phone:
