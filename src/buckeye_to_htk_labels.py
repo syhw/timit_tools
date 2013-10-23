@@ -1,6 +1,6 @@
 import os, sys
 
-def convert(folder):
+def convert(folder): 
     for d, ds, fs in os.walk(folder):
         for fname in fs:
             if fname[-7:] != '.phones' or fname[0] == '.': # no hidden files
@@ -35,4 +35,4 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         folder = sys.argv[1]
     print "Converting the *.phones (in seconds) in *.lab (in nanosecs) in", folder
-    convert(folder)
+    convert(folder) 
