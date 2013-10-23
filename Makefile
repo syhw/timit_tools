@@ -52,32 +52,37 @@ prepare_CSJ:
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
 
 
-prepare_buckeye_init:
+prepare_buckeye:
+	@echo -e "\n>>> remove train and test folders if any\n"
+	rm -rf $(dataset)/train
+	rm -rf $(dataset)/test
 	@echo -e "\n>>> convert the Buckeye annotations (.phones) to .lab (HTK format) \n"
 	python src/buckeye_to_htk_labels.py $(dataset)
 	@echo -e "\n>>> split the dataset into a training and testing set\n"
-	mkdir -p $(dataset)/../dataset_train_test/train
-	mkdir -p $(dataset)/../dataset_train_test/test
+	mkdir -p $(dataset)/train
+	mkdir -p $(dataset)/test
 	###python src/train_test_folders.py $(dataset) $(dataset)/../dataset_train_test --wav # <- this is a random split that samples accross all speakers
-	cp -r $(dataset)/s0* $(dataset)/../dataset_train_test/train/
-	cp -r $(dataset)/s1* $(dataset)/../dataset_train_test/train/
-	cp -r $(dataset)/s2* $(dataset)/../dataset_train_test/train/
-	cp -r $(dataset)/s3* $(dataset)/../dataset_train_test/train/
-	cp -r $(dataset)/s40 $(dataset)/../dataset_train_test/test/
-
-
-prepare_buckeye: prepare_buckeye_init
-override dataset := $(shell echo "`dirname $(dataset)`/dataset_train_test")
+	cp -r $(dataset)/full/s0* $(dataset)/train/
+	cp -r $(dataset)/full/s1* $(dataset)/train/
+	cp -r $(dataset)/full/s2* $(dataset)/train/
+	cp -r $(dataset)/full/s3* $(dataset)/train/
+	cp -r $(dataset)/full/s40 $(dataset)/test/
+	find $(dataset)/train/ -name ._* | xargs rm
+	find $(dataset)/test/ -name ._* | xargs rm
+	#rm -rf $(dataset)/train/s39/ # that's a fix because of several corrupted waves
 	@echo -e "\ndataset is now $(dataset)"
 	@echo -e "\n>>> split the WAV and LAB files on IVER (other interlocutor)\n"
-	python src/split_lab_wav.py $(dataset) IVER
+	python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE
+	python src/split_lab_wav.py $(dataset)/test IVER VOCNOISE
 	@echo -e "\n>>> put !ENTER and !EXIT symbols and substitute phones\n"
-	python src/substitute_phones.py $(dataset) --sentences buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/train --sentences buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/test --sentences buckeye_foldings.json
 	@echo -e "\n>>> produce MFCC from WAV files\n"
-	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
 	@echo -e "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
-	#python src/create_phonesMLF_list_labels.py $(dataset)/train
-	#python src/create_phonesMLF_list_labels.py $(dataset)/test
+	python src/create_phonesMLF_list_labels.py $(dataset)/train
+	python src/create_phonesMLF_list_labels.py $(dataset)/test
 
 
 train: train_monophones
@@ -305,6 +310,7 @@ all_timit:
 
 
 all_buckeye:
+	@echo -e "\n>>> You need a $(dataset)/full folder with the full Buckeye corpus\n"
 	make prepare_buckeye $(dataset)
 	make train_monophones dataset_train_folder=$(dataset)/train
 	make bigram_LM
