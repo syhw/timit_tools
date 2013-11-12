@@ -3,7 +3,7 @@ import theano.tensor as T
 import numpy as np
 
 BORROW = True # True makes it faster with the GPU
-USE_CACHING = True # beware if you use RBM / GRBM alternatively, set it to False
+USE_CACHING = False # beware if you use RBM / GRBM or gammatones / speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
 
@@ -122,8 +122,8 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, 
 
 
 def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False, 
-              pca_whiten=0, gammatones=False, dataset_name=''):
-    # TODO "standard split" as in /fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split
+        pca_whiten=0, gammatones=False, dataset_name='', speakers=False):
+    # TODO remove !ENTER !EXIT sil when speakers==True
     # normalize takes precedence over student's t-stat
     xname = "xdata"
     if gammatones:
@@ -133,6 +133,9 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
         test_x = np.load(dataset + "/aligned_test_" + xname + ".npy")
         test_y = np.load(dataset + "/aligned_test_ylabels.npy")
+        if speakers:
+            train_yspkr = np.load(dataset + "/aligned_train_yspeakers.npy")
+            test_yspkr = np.load(dataset + "/aligned_test_yspeakers.npy")
 
     except:
         print >> sys.stderr, "you need the .npy python arrays"
@@ -142,6 +145,9 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
         print >> sys.stderr, dataset + "/aligned_train_ylabels.npy"
         print >> sys.stderr, dataset + "/aligned_test_" + xname + ".npy"
         print >> sys.stderr, dataset + "/aligned_test_ylabels.npy"
+        if speakers:
+            print >> sys.stderr, dataset + "/aligned_train_yspeakers.npy"
+            print >> sys.stderr, dataset + "/aligned_test_yspeakers.npy"
         sys.exit(-1)
 
     print "train_x shape:", train_x.shape
@@ -177,14 +183,38 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
     ### Feature values (Xs)
     print "preparing / padding Xs"
     if nframes > 1:
-        train_x_f = padding(nframes, train_x, train_y)
+        if not speakers:
+            train_x_f = padding(nframes, train_x, train_y)
         test_x_f = padding(nframes, test_x, test_y)
+
+    ### In the case of speakers discrimination:
+    if speakers:
+        # switch the y for speakers now
+        ###train_y = train_yspkr
+        test_y = test_yspkr
+        # regroup: otherwise there will be ONLY never-seen-before speakers labels in the test set
+        ###train_x = np.append(train_x, test_x, axis=0)
+        ###train_x_f = np.append(train_x_f, test_x_f, axis=0)
+        ###train_y = np.append(train_y, test_y, axis=0)
+        # change dataset name
+        train_x = test_x ###
+        train_x_f = test_x_f ###
+        train_y = test_y ###
+        dataset_name += '_spkr'
 
     ### Labels (Ys)
     from collections import Counter
     c = Counter(train_y)
+    if speakers:
+        ###c['unknown_spkr'] = 1
+        c = Counter(test_y)
+
     to_int = dict([(k, c.keys().index(k)) for k in c.iterkeys()])
     to_state = dict([(c.keys().index(k), k) for k in c.iterkeys()])
+    ###if speakers:
+    ###    c2 = Counter(test_y)
+    ###    to_int.update([(spkr, to_int['unknown_spkr']) for spkr in c2.keys() if spkr not in to_int])
+
     with open(dataset_name + '_to_int_and_to_state_dicts_tuple.pickle', 'w') as f:
         cPickle.dump((to_int, to_state), f)
 
@@ -205,7 +235,7 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
 
-def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, pca_whiten=0, cv_frac=0.2, gammatones=False, dataset_name='timit'):
+def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, pca_whiten=0, cv_frac=0.2, gammatones=False, dataset_name='timit', speakers=False):
     """ 
     params:
      - dataset: folder
@@ -240,7 +270,7 @@ def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, p
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
                 nframes=nframes, unit=unit, normalize=normalize, 
                 student=student, pca_whiten=pca_whiten, gammatones=gammatones,
-                dataset_name=dataset_name)
+                dataset_name=dataset_name, speakers=speakers)
         with open('train_x_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
             np.save(f, train_x)
         with open('train_y_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
@@ -267,6 +297,7 @@ def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, p
     else:
         [train_x, train_y, test_x, test_y] = prep_and_serialize()
 
+    # TODO with fixed dev test (/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/)
     from sklearn import cross_validation
     X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=cv_frac, random_state=0)
     train_set_x = theano.shared(X_train, borrow=BORROW)

@@ -53,11 +53,13 @@ def extract_from_mlf(mlf, do_gammatones):
     x = np.ndarray((0, N_MFCC_COEFFS), dtype='float32')
     x_gamma = np.ndarray((0, N_GAMMATONES*3), dtype='float32')
     y = []
+    y_spkr = []
     
     with open(mlf) as f:
         tmp_len_x = 0 # verify sizes
         len_x = 0
         end = 0
+        speaker_label = ''
         for line in f:
             line = line.rstrip('\n')
             if len(line) < 1:
@@ -65,7 +67,7 @@ def extract_from_mlf(mlf, do_gammatones):
             if line[0] == '"': # TODO remove SA
                 assert tmp_len_x == 0, "the file above this one %s was mismatching x (%d frames) and y (%d frames) lengths by %d" % (line, 
                         len_x, end, tmp_len_x)
-
+                speaker_label = line.split('/')[-2]
                 # load HTK's MFCC
                 t = htkmfc.open(line.strip('"')[:-3] + 'mfc') # .lab -> .mfc
                 if do_gammatones:
@@ -105,24 +107,29 @@ def extract_from_mlf(mlf, do_gammatones):
                 for i in xrange(start, end):
                     tmp_len_x -= 1
                     y.append(state)
+                    y_spkr.append(speaker_label)
                 
     assert(len(y) == x.shape[0])
+    assert(len(y_spkr) == x.shape[0])
     rootname = mlf[:-4] 
     np.save(rootname + '_xdata.npy', x)
     if do_gammatones:
         np.save(rootname + '_xgamma.npy', x_gamma)
     yy = np.array(y)
+    yy_spkr = np.array(y_spkr)
     np.save(rootname + '_ylabels.npy', yy)
+    np.save(rootname + '_yspeakers.npy', yy_spkr)
 
-    print "length x:", len(x), " length y:", len(y)
-    print "shape x:", x.shape, "shape yy:", yy.shape 
+    print "length x:", len(x), "length y:", len(y), "length y_spkr:", len(y_spkr)
+    print "shape x:", x.shape, "shape yy:", yy.shape, "shape yy_spkr:", yy_spkr.shape
 
     if TEST:
         tx = np.load(rootname + '_xdata.npy')
         if do_gammatones:
             tx_gamma = np.load(rootname + '_xgamma.npy')
         ty = np.load(rootname + '_ylabels.npy')
-        if np.all(tx==x) and np.all(ty==yy):
+        ty_spkr = np.load(rootname + '_yspeakers.npy')
+        if np.all(tx==x) and np.all(ty==yy) and np.all(ty_spkr==yy_spkr):
             if do_gammatones:
                 assert_allclose(tx_gamma, x_gamma, err_msg="x_gamma and its serialized version are not allclose")
             print "SUCCESS: serialized and current in-memory arrays are equal"
@@ -131,6 +138,7 @@ def extract_from_mlf(mlf, do_gammatones):
             print "ERROR: serialized and current in-memory arrays differ!"
             print "x (MFCC):", np.all(tx==x)
             print "y (labels):", np.all(ty==yy)
+            print "y (speakers):", np.all(ty_spkr==yy_spkr)
             sys.exit(-1)
 
 

@@ -3,9 +3,11 @@ import numpy as np
 import scipy.io.wavfile as wav
 ###import wave, struct
 
+ONE_S = 1000000000 # one second in nanoseconds
 MFCC_FRAMERATE = 10000000 # 10ms MFCC framerate (in nanoseconds)
-MFCC_FRAMES_PER_SECOND = 1000000000/MFCC_FRAMERATE
+MFCC_FRAMES_PER_SECOND = ONE_S/MFCC_FRAMERATE
 MIN_PHONES = 4
+assert(MIN_PHONES >= 1)
 N_ENTER_EXIT_FRAMES = 5 # number of !ENTER and !EXIT frames, currently this adds NOISE
                         # see TODO in wave_split()
 
@@ -27,14 +29,13 @@ def wave_split(start, end, wavfname, compt):
     ###nchannels = wavefile.getnchannels()
     ###fr = wavefile.getframerate()
 
-    mult = fr * 1. / 1000000000 # because start and end are in nanoseconds
+    mult = fr * 1. / ONE_S # because start and end are in nanoseconds
     start_in_frames = int(start * mult)
     end_in_frames = int(math.ceil(end) * mult) + fr / (2 * MFCC_FRAMES_PER_SECOND) # adds half a MFCC frame
 
     interval = sample[start_in_frames:end_in_frames]
-    #print start_in_frames
-    #print end_in_frames
-    #print interval.shape
+    if interval.shape[0] == 0:
+        return -1
     max_volume = np.max(interval)
     ###wavefile.readframes(start_in_frames) # skipping to start
     ###interval = wavefile.readframes(end_in_frames - start_in_frames)
@@ -44,7 +45,6 @@ def wave_split(start, end, wavfname, compt):
     outputfilename = wavfname[:-4] + '_' + str(compt) + '.wav'
 
     to_write = interval
-    print to_write.shape
     n_frames_enter_exit = N_ENTER_EXIT_FRAMES * fr / MFCC_FRAMES_PER_SECOND
     ###wavefile_ext = wave.open(outputfilename, 'w')
     ###wavefile_ext.setparams((nchannels, wavefile.getsampwidth(), 
@@ -67,6 +67,7 @@ def wave_split(start, end, wavfname, compt):
     wav.write(outputfilename, fr, to_write)
     ###wavefile_ext.close()
     ###return wavefile_ext
+    return 0
 
 
 def write_lab(buffer, labfname, compt):
@@ -105,12 +106,16 @@ def split_in(folder, split_phones):
             buffer = []
             for line in lab_r:
                 s, e, p = line.strip(' \n').split()
-                buffer.append((int(s), int(e), p))
-                if p in split_phones:
+                s, e = int(s), int(e)
+                buffer.append((s, e, p))
+                if p in split_phones or 'SIL' in p and (e-s) > 0.5*ONE_S:
                     if len(buffer) >= MIN_PHONES + 2:
                         start = buffer[1][0]
                         end = buffer[-2][1]
-                        wave_split(start, end, wav_fname, compt)
+                        assert(end > start)
+                        if wave_split(start, end, wav_fname, compt) != 0:
+                            print "ERROR with:", start, end, wav_fname, compt
+                            break
                         write_lab(buffer, lab_fname, compt)
                         compt += 1
                     buffer = [(int(s), int(e), p)]

@@ -67,8 +67,8 @@ prepare_buckeye:
 	cp -r $(dataset)/full/s2* $(dataset)/train/
 	cp -r $(dataset)/full/s3* $(dataset)/train/
 	cp -r $(dataset)/full/s40 $(dataset)/test/
-	find $(dataset)/train/ -name ._* | xargs rm
-	find $(dataset)/test/ -name ._* | xargs rm
+	#find $(dataset)/train/ -name ._* | xargs rm
+	#find $(dataset)/test/ -name ._* | xargs rm
 	#rm -rf $(dataset)/train/s39/ # that's a fix because of several corrupted waves
 	@echo -e "\ndataset is now $(dataset)"
 	@echo -e "\n>>> split the WAV and LAB files on IVER (other interlocutor)\n"

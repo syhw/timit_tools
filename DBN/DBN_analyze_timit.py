@@ -20,13 +20,15 @@ from rbm import RBM
 from grbm import GRBM
 from prep_timit import load_data
 
-#DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
+SPEAKERS = False
 #DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
 DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split'
+if SPEAKERS:
+    DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
 N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
-LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 100. # we take a lower learning rate
+LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
 output_file_name = 'dbn_analyze_timit'
 
@@ -166,6 +168,10 @@ class DBN(object):
             input=self.sigmoid_layers[i].output,
             n_in=hidden_layers_sizes[i],
             n_out=n_outs) for i in xrange(self.n_layers)]
+#        self.layered_classifiers.append(LogisticRegression( TODO
+#            input=self.x,
+#            n_in=n_ins,
+#            n_out=n_outs)) # classifier with outputs of all layers
         self.layered_classifiers.append(LogisticRegression(
             input=self.x,
             n_in=n_ins,
@@ -377,9 +383,9 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
-             pretrain_lr=0.001, k=1, training_epochs=100, # TODO 100+
-             dataset=DATASET, batch_size=20, dbn_load_from=''): # TODO k=2+
+def train_DBN(finetune_lr=0.01, pretraining_epochs=100,
+             pretrain_lr=0.001, k=1, training_epochs=200,
+             dataset=DATASET, batch_size=20, dbn_load_from=''):
     """
 
     :type learning_rate: float
@@ -400,7 +406,7 @@ def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
 
     print "loading dataset from", dataset
     ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.0)
-    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.12, dataset_name='TIMIT')
+    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.15, dataset_name='TIMIT_std', speakers=SPEAKERS)
     # unit=False because we don't want the [0-1] binary RBM projection
     # normalize=True because we want the data to be 0 centered with 1 variance.
     # pca_whiten=True because we want the data to be decorrelated
@@ -408,10 +414,16 @@ def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1] 
     test_set_x, test_set_y = datasets[2]
+    N_OUTS = 62 * 3 # #phones * #states
+    if SPEAKERS:
+        from collections import Counter
+        c = Counter(train_set_y.eval())
+        N_OUTS = len(c)
     print "dataset loaded!"
     print "train set size", train_set_x.shape[0]
     print "validation set size", valid_set_x.shape[0]
     print "test set size", test_set_x.shape[0]
+    print "N_OUTS:", N_OUTS
 
     # compute number of minibatches for training, validation and testing
     n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
@@ -424,7 +436,7 @@ def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
     assert(train_set_x.shape[1].eval() == N_FRAMES * 39) # check
     dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1].eval(),
               hidden_layers_sizes=[1248, 1248, 1248],
-              n_outs=62 * 3)
+              n_outs=N_OUTS)
 
     #########################
     # PRETRAINING THE MODEL #
@@ -440,6 +452,10 @@ def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
                                                 batch_size=batch_size)
 
     print 'error rate:', on_top_of_MFCC_fn()
+    #dbn = None ### TOREMOVE
+    #with open('dbn_analyze_timit__plr1.0E-03_pep100_flr1.0E-03_fep_10_k1_layer_1.pickle') as f: ### TOREMOVE
+    #    dbn = cPickle.load(f) ### TOREMOVE
+
     print '... getting the pretraining functions'
     pretraining_fns = dbn.pretraining_functions(train_set_x=train_set_x,
                                                 batch_size=batch_size,
@@ -453,11 +469,14 @@ def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
                                                 test_set_y=test_set_y,
                                                 batch_size=batch_size)
                                         for ii in xrange(dbn.n_layers)]
+    for i in xrange(dbn.n_layers):
+        print i, pretraining_eval_fns[i]()
 
     print '... pre-training the model'
     start_time = time.clock()
     ## Pre-train layer-wise
     for i in xrange(dbn.n_layers):
+        #######################
         # go through pretraining epochs
         for epoch in xrange(pretraining_epochs):
             # go through the training set
@@ -477,6 +496,7 @@ def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
         with open(output_file_name + '_layer_' + str(i) + '.pickle', 'w') as f:
             cPickle.dump(dbn, f)
         print "dumped a partially pre-trained model"
+        #######################
 
     end_time = time.clock()
     print >> sys.stderr, ('The pretraining code for file ' +
@@ -493,7 +513,7 @@ def train_DBN(finetune_lr=0.001, pretraining_epochs=0, # TODO 100+
     #with open(output_file_name + '_layer_2.pickle') as f:
     #    dbn = cPickle.load(f)
 
-    #datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.2, dataset_name='TIMIT')
+    #datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.2, dataset_name='TIMIT', speakers=SPEAKERS)
     #train_set_x, train_set_y, valid_set_x, valid_set_y, test_set_x, test_set_y = None, None, None, None, None, None
     #train_set_x, train_set_y = datasets[0]
     #valid_set_x, valid_set_y = datasets[1] 
