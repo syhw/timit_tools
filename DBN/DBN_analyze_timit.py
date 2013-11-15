@@ -619,7 +619,7 @@ if __name__ == '__main__':
         flr = float(flr)
         fep = int(fep)
         k = int(k)
-        tmp = '_plr%.1E_pep%d_flr%.1E_fep_%d_k%d' % (plr, pep, flr, fep, k)
+        tmp = '_plr%.1E_pep%d_flr%.1E_fep%d_k%d' % (plr, pep, flr, fep, k)
         output_file_name = output_file_name + tmp
         train_DBN(finetune_lr=flr, pretraining_epochs=pep,
              pretrain_lr=plr, k=k, training_epochs=fep,
