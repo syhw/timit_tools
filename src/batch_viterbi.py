@@ -34,7 +34,7 @@ SCALE_FACTOR = 1.0 # importance of the LM w.r.t. the acoustics
 INSERTION_PENALTY = 2.5 # penalty of inserting a new phone (in the Viterbi)
 epsilon = 1E-5 # degree of precision for floating (0.0-1.0 probas) operations
 epsilon_log = 1E-80 # to add for logs
-N_BATCHES_DATASET = 8 # number of batches in which we divide the dataset 
+N_BATCHES_DATASET = 32 # number of batches in which we divide the dataset 
                       # (to fit in the GPU memory, only 2Gb at home)
 
 class Phone:
@@ -700,6 +700,7 @@ def process(ofname, iscpfname, ihmmfname,
             print tmp_likelihoods.shape
         print map_states_to_phones
         print dbn_phones_to_states
+        assert set(map_states_to_phones.values()) == set(dbn_phones_to_states.keys()), "Phones differ between the HMM and the DBN"
         columns_remapping = [dbn_phones_to_states[map_states_to_phones[i]] for i in xrange(tmp_likelihoods.shape[1])]
         if VERBOSE:
             print columns_remapping

@@ -22,8 +22,8 @@ from prep_timit import load_data
 
 #DATASET = '/media/bigdata/TIMIT'
 SPEAKERS = False
-#DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
-DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split'
+DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
+#DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split'
 if SPEAKERS:
     DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
 N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 

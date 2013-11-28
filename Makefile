@@ -1,4 +1,4 @@
-TMP_TRAIN_FOLDER=tmp_buckeye_train
+TMP_TRAIN_FOLDER=tmp_TIMIT_wo_sa
 
 help:
 	@echo -e "Usage (in order):"

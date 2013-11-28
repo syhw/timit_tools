@@ -26,7 +26,7 @@ N_FRAMES = 13  # HAS TO BE AN ODD NUMBER
                #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_2496_units_student_timit'
+output_file_name = 'dbn_2496_units'
 
 
 class DBN(object):
@@ -278,8 +278,8 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.01, pretraining_epochs=10, # TODO 100+
-             pretrain_lr=0.1, k=1, training_epochs=100, # TODO 100+
+def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
+             pretrain_lr=0.01, k=1, training_epochs=100, # TODO 100+
              dataset=DATASET, batch_size=10):
     """
 
@@ -301,8 +301,7 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=10, # TODO 100+
 
     print "loading dataset from", dataset
     ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.0)
-#    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=False, cv_frac=0.1) 
-    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.1) 
+    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=False, cv_frac=0.2) 
     # unit=False because we don't want the [0-1] binary RBM projection
     # normalize=True because we want the data to be 0 centered with 1 variance.
     # pca_whiten=True because we want the data to be decorrelated
@@ -452,8 +451,8 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=10, # TODO 100+
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    #with open(output_file_name + '.pickle', 'w') as f:
-    #    cPickle.dump(dbn, f)
+    with open(output_file_name + '.pickle', 'w') as f:
+        cPickle.dump(dbn, f)
 
 
 if __name__ == '__main__':

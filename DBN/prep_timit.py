@@ -3,7 +3,7 @@ import theano.tensor as T
 import numpy as np
 
 BORROW = True # True makes it faster with the GPU
-USE_CACHING = False # beware if you use RBM / GRBM or gammatones / speaker labels alternatively, set it to False
+USE_CACHING = True # beware if you use RBM / GRBM or gammatones / speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
 

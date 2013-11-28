@@ -131,6 +131,7 @@ class GRBM(object):
         '''        
         pre_sigmoid_activation = T.dot(vis, self.W) + self.hbias
         return [pre_sigmoid_activation, T.nnet.sigmoid(pre_sigmoid_activation)]
+        #return [pre_sigmoid_activation, T.nnet.ultra_fast_sigmoid(pre_sigmoid_activation)]
 
     def sample_h_given_v(self, v0_sample):
         ''' This function infers state of hidden units given visible units '''
@@ -159,6 +160,7 @@ class GRBM(object):
         '''
         pre_sigmoid_activation = T.dot(hid, self.W.T) + self.vbias
         return [pre_sigmoid_activation, T.nnet.sigmoid(pre_sigmoid_activation)]
+        #return [pre_sigmoid_activation, T.nnet.ultra_fast_sigmoid(pre_sigmoid_activation)]
 
     def sample_v_given_h(self, h0_sample):
         ''' This function infers state of visible units given hidden units 
@@ -170,10 +172,9 @@ class GRBM(object):
         # int64 by default. If we want to keep our computations in floatX
         # for the GPU we need to specify to return the dtype floatX
         #####v1_sample = self.theano_rng.binomial(size=v1_mean.shape, n=1, p=v1_mean, dtype=theano.config.floatX) TODO
-        v1_sample = self.theano_rng.normal(size=v1_mean.shape, avg=v1_mean, dtype=theano.config.floatX)
-        #return [pre_sigmoid_v1, v1_mean, v1_sample]
-        #####return [pre_sigmoid_v1, v1_mean, pre_sigmoid_v1] TODO
-        return [pre_sigmoid_v1, v1_mean, v1_sample]
+        #####v1_sample = self.theano_rng.normal(size=v1_mean.shape, avg=v1_mean, dtype=theano.config.floatX) TODO
+        ######return [pre_sigmoid_v1, v1_mean, v1_sample] TODO
+        return [pre_sigmoid_v1, v1_mean, pre_sigmoid_v1]
 
     def gibbs_hvh(self, h0_sample):
         ''' This function implements one step of Gibbs sampling,
@@ -241,12 +242,12 @@ class GRBM(object):
         chain_end = nv_samples[-1]
 
         # regularization
-        L1_cost = L1 * 1./self.W.shape[0] * T.sum(abs(self.W)) # TODO biases ?
+        ####L1_cost = L1 * 1./self.W.shape[0] * T.sum(abs(self.W)) # TODO biases ?
         # TODO see http://webia.lip6.fr/~cord/Publications_files/ECCV2012cord.pdf
         # and http://arxiv.org/pdf/1008.4988.pdf
         #L2_sqr = T.sum(param ** 2)
         cost = T.mean(self.free_energy(self.input)) - T.mean(
-            self.free_energy(chain_end)) + L1_cost
+            self.free_energy(chain_end))#### + L1_cost
 
         # We must not compute the gradient through the gibbs sampling
         gparams = T.grad(cost, self.params, consider_constant=[chain_end])
@@ -291,6 +292,7 @@ class GRBM(object):
 
         # equivalent to e^(-FE(x_i)) / (e^(-FE(x_i)) + e^(-FE(x_{\i})))
         cost = T.mean(self.n_visible * T.log(T.nnet.sigmoid(fe_xi_flip -
+        #cost = T.mean(self.n_visible * T.log(T.nnet.ultra_fast_sigmoid(fe_xi_flip -
                                                             fe_xi)))
 
         # increment bit_i_idx % number as part of updates
@@ -302,6 +304,7 @@ class GRBM(object):
     # TODO: I am not confident this is correct, as I should compare the input with the input estimation using the model
     def get_reconstruction_cost_MSE(self, updates, pre_sigmoid_nv):
       mse = T.sum(T.sqr(self.input - T.log(T.nnet.sigmoid(pre_sigmoid_nv))), axis=1)
+      #mse = T.sum(T.sqr(self.input - T.log(T.nnet.ultra_fast_sigmoid(pre_sigmoid_nv))), axis=1)
       return mse
 
     def get_reconstruction_cost(self, updates, pre_sigmoid_nv):
@@ -336,7 +339,9 @@ class GRBM(object):
 
         cross_entropy = T.mean(
                 T.sum(self.input * T.log(T.nnet.sigmoid(pre_sigmoid_nv)) +
+                #T.sum(self.input * T.log(T.nnet.ultra_fast_sigmoid(pre_sigmoid_nv)) +
                 (1 - self.input) * T.log(1 - T.nnet.sigmoid(pre_sigmoid_nv)),
+                #(1 - self.input) * T.log(1 - T.nnet.ultra_fast_sigmoid(pre_sigmoid_nv)),
                       axis=1))
 
         return cross_entropy

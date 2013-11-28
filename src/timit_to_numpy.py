@@ -2,6 +2,10 @@ import sys
 import numpy as np
 from numpy.testing import assert_allclose
 import htkmfc
+# for the filterbanks
+from scipy.io import wavfile
+from scikits.talkbox.features import mfcc as tbmfcc
+# for the gammatones
 from brian import Hz, log10
 from brian.hears import loadsound, erbspace, Gammatone, ApproximateGammatone
 
@@ -13,9 +17,10 @@ Mohamed et al., NIPS 2009" and other Hinton's group papers.
 # TODO load the following parameters from wav_config
 SAMPLING_RATE = 16000 # Hz
 MFCC_TIMESTEP = 10 # 10 ms
+HAMMING_SIZE = 25 # 25 ms
 N_MFCC_COEFFS = 39 # as in Mohamed et al. / Dahl et al. (Hinton group) papers
 N_FILTERBANK_COEFFS = 40 # as in Acoustic Modeling using Deep Belief Networks
-                         # Mohamed et al. TODO
+                         # Mohamed et al.
 
 N_GAMMATONES = 50 # c.f. http://www.briansimulator.org/docs/hears.html
                   # and http://www.briansimulator.org/docs/examples-hears_approximate_gammatone.html#example-hears-approximate-gammatone
@@ -51,6 +56,7 @@ def subsample_apply_f(arr, n, f):
 
 def extract_from_mlf(mlf, do_gammatones):
     x = np.ndarray((0, N_MFCC_COEFFS), dtype='float32')
+    x_fbank = np.ndarray((0, N_FILTERBANK_COEFFS), dtype='float32')
     x_gamma = np.ndarray((0, N_GAMMATONES*3), dtype='float32')
     y = []
     y_spkr = []
@@ -68,8 +74,20 @@ def extract_from_mlf(mlf, do_gammatones):
                 assert tmp_len_x == 0, "the file above this one %s was mismatching x (%d frames) and y (%d frames) lengths by %d" % (line, 
                         len_x, end, tmp_len_x)
                 speaker_label = line.split('/')[-2]
+
                 # load HTK's MFCC
                 t = htkmfc.open(line.strip('"')[:-3] + 'mfc') # .lab -> .mfc
+                x = np.append(x, t.getall(), axis=0)
+                len_x = t.getall().shape[0]
+                tmp_len_x = len_x
+
+                # do our own filterbanks
+                fr, snd = wavfile.read(line.strip('"')[:-3] + 'wav') # .lab -> .wav
+                assert fr == SAMPLING_RATE, "SAMPLING_RATE is not what is found in the wav file"
+                _, fbank, _ = tbmfcc(snd, nwin=HAMMING_SIZE/1000.*SAMPLING_RATE, nfft=2048, fs=SAMPLING_RATE, nceps=13)
+                x_fbank = np.append(x_fbank, fbank, axis=0)
+                assert t.getall().shape[0] == fbank.shape[0], "MFCC and filterbank not of the same length (not on the same sampling rate)"
+
                 if do_gammatones:
                     # load the wav sound (with Brian)
                     sound = loadsound(line.strip('"')[:-3] + 'wav') # .lab -> .wav
@@ -97,9 +115,7 @@ def extract_from_mlf(mlf, do_gammatones):
                         print "exiting because of the mismatch"
                         sys.exit(-1)
                     x_gamma = np.append(x_gamma, tmp, axis=0)
-                x = np.append(x, t.getall(), axis=0)
-                len_x = t.getall().shape[0]
-                tmp_len_x = len_x
+
             elif line[0].isdigit():
                 start, end, state = line.split()[:3]
                 start = (int(start)+9999)/(MFCC_TIMESTEP * 10000) # htk
@@ -113,6 +129,7 @@ def extract_from_mlf(mlf, do_gammatones):
     assert(len(y_spkr) == x.shape[0])
     rootname = mlf[:-4] 
     np.save(rootname + '_xdata.npy', x)
+    np.save(rootname + '_xfbank.npy', x_fbank)
     if do_gammatones:
         np.save(rootname + '_xgamma.npy', x_gamma)
     yy = np.array(y)
@@ -125,17 +142,19 @@ def extract_from_mlf(mlf, do_gammatones):
 
     if TEST:
         tx = np.load(rootname + '_xdata.npy')
+        tx_fbank = np.load(rootname + '_xfbank.npy')
         if do_gammatones:
             tx_gamma = np.load(rootname + '_xgamma.npy')
         ty = np.load(rootname + '_ylabels.npy')
         ty_spkr = np.load(rootname + '_yspeakers.npy')
         if np.all(tx==x) and np.all(ty==yy) and np.all(ty_spkr==yy_spkr):
+            assert_allclose(tx_fbank, x_fbank, err_msg="x_fbank and its serialized version are not allclose")
             if do_gammatones:
                 assert_allclose(tx_gamma, x_gamma, err_msg="x_gamma and its serialized version are not allclose")
             print "SUCCESS: serialized and current in-memory arrays are equal"
             sys.exit(0)
         else:
-            print "ERROR: serialized and current in-memory arrays differ!"
+            print "ERROR: serialized and current X (MFCC) or Y in-memory arrays differ!"
             print "x (MFCC):", np.all(tx==x)
             print "y (labels):", np.all(ty==yy)
             print "y (speakers):", np.all(ty_spkr==yy_spkr)
