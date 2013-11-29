@@ -1,5 +1,3 @@
-"""
-"""
 import cPickle
 import gzip
 import os
@@ -15,18 +13,37 @@ from theano import shared
 
 from logistic_timit import LogisticRegression 
 from mlp import HiddenLayer
-from rbm import RBM
-from grbm import GRBM
+from relu_rbm import RBM
+from relu_grbm import GRBM
 from prep_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
-DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
-N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
+DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/wo_sa'
+N_FRAMES = 23  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_2496_units'
+BORROW = True
+output_file_name = 'dbn_ReLu_2496_units_23_frames'
+
+
+class DatasetIterator(object):
+    def __init__(self, x, y, batch_size):
+        self._x = x
+        self._y = y
+        #self._x = theano.shared(x, borrow=BORROW)
+        #self._y = theano.shared(y, borrow=BORROW)
+        self._batch_size = batch_size
+        self._n_batches = self._x.shape[0] / self._batch_size
+        self._rest = self._x.shape[0] % self._batch_size # TODO
+        #self._n_batches = x.shape[0] / self._batch_size
+        #self._rest = x.shape[0] % self._batch_size # TODO
+
+    def __iter__(self):
+        for index in xrange(self._n_batches):
+            yield self._x[index:index+self._batch_size], self._y[index:index+self._batch_size]
+            #yield theano.shared(self._x[index:index+self._batch_size], borrow=BORROW), theano.shared(self._y[index:index+self._batch_size], borrow=BORROW)
 
 
 class DBN(object):
@@ -74,7 +91,7 @@ class DBN(object):
             theano_rng = RandomStreams(numpy_rng.randint(2 ** 30))
 
         # allocate symbolic variables for the data
-        self.x = T.fmatrix('x')  # the data is presented as rasterized images
+        self.x = T.matrix('x')  # the data is presented as rasterized images
         self.y = T.ivector('y')  # the labels are presented as 1D vector
                                  # of [int] labels
 
@@ -158,32 +175,9 @@ class DBN(object):
         # minibatch given by self.x and self.y
         self.errors = self.logLayer.errors(self.y)
 
-    def pretraining_functions(self, train_set_x, batch_size, k):
-        '''Generates a list of functions, for performing one step of
-        gradient descent at a given layer. The function will require
-        as input the minibatch index, and to train an RBM you just
-        need to iterate, calling the corresponding function on all
-        minibatch indexes.
-
-        :type train_set_x: theano.tensor.TensorType
-        :param train_set_x: Shared var. that contains all datapoints used
-                            for training the RBM
-        :type batch_size: int
-        :param batch_size: size of a [mini]batch
-        :param k: number of Gibbs steps to do in CD-k / PCD-k
-
-        '''
-
-        # index to a [mini]batch
-        index = T.lscalar('index')  # index to a minibatch
+    def pretraining_functions(self, k):
+        batch_x = T.fmatrix('batch_x')
         learning_rate = T.scalar('lr')  # learning rate to use
-
-        # number of batches
-        n_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
-        # begining of a batch, given `index`
-        batch_begin = index * batch_size
-        # ending of a batch given `index`
-        batch_end = batch_begin + batch_size
 
         pretrain_fns = []
         for rbm in self.rbm_layers:
@@ -197,90 +191,54 @@ class DBN(object):
                                                  persistent=markov_chain, k=k)
 
             # compile the theano function
-            fn = theano.function(inputs=[index,
+            fn = theano.function(inputs=[batch_x,
                             theano.Param(learning_rate, default=0.1)],
                                  outputs=cost,
                                  updates=updates,
-                                 givens={self.x:
-                                    train_set_x[batch_begin:batch_end]})
+                                 givens={self.x: batch_x})
             # append `fn` to the list of functions
             pretrain_fns.append(fn)
 
         return pretrain_fns
 
-    def build_finetune_functions(self, datasets, batch_size, learning_rate):
-        '''Generates a function `train` that implements one step of
-        finetuning, a function `validate` that computes the error on a
-        batch from the validation set, and a function `test` that
-        computes the error on a batch from the testing set
-
-        :type datasets: list of pairs of theano.tensor.TensorType
-        :param datasets: It is a list that contain all the datasets;
-                        the has to contain three pairs, `train`,
-                        `valid`, `test` in this order, where each pair
-                        is formed of two Theano variables, one for the
-                        datapoints, the other for the labels
-        :type batch_size: int
-        :param batch_size: size of a minibatch
-        :type learning_rate: float
-        :param learning_rate: learning rate used during finetune stage
-
-        '''
-
-        (train_set_x, train_set_y) = datasets[0]
-        (valid_set_x, valid_set_y) = datasets[1]
-        (test_set_x, test_set_y) = datasets[2]
-
-        # compute number of minibatches for training, validation and testing
-        n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
-        n_valid_batches /= batch_size
-        n_test_batches = test_set_x.get_value(borrow=True).shape[0]
-        n_test_batches /= batch_size
-
-        index = T.lscalar('index')  # index to a [mini]batch
-
+    def build_finetune_functions(self, valid_set, test_set):
+        batch_x = T.matrix('batch_x')
+        batch_y = T.vector('batch_y')
+        ###learning_rate = T.matrix('lr')  # learning rate to use
+        learning_rate = T.scalar('lr')  # learning rate to use
         # compute the gradients with respect to the model parameters
         gparams = T.grad(self.finetune_cost, self.params)
 
         # compute list of fine-tuning updates
         updates = {}
-        for param, gparam in zip(self.params, gparams):
+        for i, (param, gparam) in enumerate(zip(self.params, gparams)):
+            ###updates[param] = param - gparam * learning_rate[i]
             updates[param] = param - gparam * learning_rate
 
-        train_fn = theano.function(inputs=[index],
+        train_fn = theano.function(inputs=[theano.Param(batch_x), theano.Param(batch_y),
+            theano.Param(learning_rate)],
               outputs=self.finetune_cost,
               updates=updates,
-              givens={self.x: train_set_x[index * batch_size:
-                                          (index + 1) * batch_size],
-                      self.y: train_set_y[index * batch_size:
-                                          (index + 1) * batch_size]})
+              givens={self.x: batch_x, self.y: batch_y})
 
-        test_score_i = theano.function([index], self.errors,
-                 givens={self.x: test_set_x[index * batch_size:
-                                            (index + 1) * batch_size],
-                         self.y: test_set_y[index * batch_size:
-                                            (index + 1) * batch_size]})
-
-        valid_score_i = theano.function([index], self.errors,
-              givens={self.x: valid_set_x[index * batch_size:
-                                          (index + 1) * batch_size],
-                      self.y: valid_set_y[index * batch_size:
-                                          (index + 1) * batch_size]})
+        test_score = theano.function(inputs=[theano.Param(batch_x), theano.Param(batch_y)],
+                outputs=self.errors,
+                givens={self.x: batch_x, self.y: batch_y})
 
         # Create a function that scans the entire validation set
         def valid_score():
-            return [valid_score_i(i) for i in xrange(n_valid_batches)]
+            return [test_score(batch_x, batch_y) for batch_x, batch_y in valid_set]
 
         # Create a function that scans the entire test set
         def test_score():
-            return [test_score_i(i) for i in xrange(n_test_batches)]
+            return [test_score(batch_x, batch_y) for batch_x, batch_y in test_set]
 
         return train_fn, valid_score, test_score
 
 
 def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
              pretrain_lr=0.01, k=1, training_epochs=100, # TODO 100+
-             dataset=DATASET, batch_size=200):
+             dataset=DATASET, batch_size=100):
     """
 
     :type learning_rate: float
@@ -300,7 +258,7 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
     """
 
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes=N_FRAMES, features='MFCC', scaling='normalize', pca_whiten=False, cv_frac=0.2) 
+    datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='normalize', cv_frac=0.2, speakers=False, numpy_array_only=True) 
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1] 
@@ -311,15 +269,13 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
     print "test set size", test_set_x.shape[0]
 
     # compute number of minibatches for training, validation and testing
-    n_train_batches = train_set_x.get_value(borrow=True).shape[0] / batch_size
+    train_set_iterator = DatasetIterator(train_set_x, train_set_y, batch_size)
 
     # numpy random generator
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
     # construct the Deep Belief Network
-    print "train_set_x.shape.eval()", train_set_x.shape.eval()
-    assert(train_set_x.shape[1].eval() == N_FRAMES * 39) # check
-    dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1].eval(),
+    dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1],
               hidden_layers_sizes=[2496, 2496, 2496],
               n_outs=62 * 3)
 
@@ -327,23 +283,22 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
     # PRETRAINING THE MODEL #
     #########################
     print '... getting the pretraining functions'
-    pretraining_fns = dbn.pretraining_functions(train_set_x=train_set_x,
-                                                batch_size=batch_size,
-                                                k=k)
+    pretraining_fns = dbn.pretraining_functions(k=k)
 
     print '... pre-training the model'
     start_time = time.clock()
     ## Pre-train layer-wise
-    for i in xrange(dbn.n_layers):
+    #for i in xrange(dbn.n_layers): # TODO
+    for i in xrange(1):
         # go through pretraining epochs
         for epoch in xrange(pretraining_epochs):
             # go through the training set
             c = []
-            for batch_index in xrange(n_train_batches):
+            for batch_index, (batch_x, _) in enumerate(train_set_iterator):
                 tmp_lr = pretrain_lr / (1. + 0.05 * batch_index) # TODO
                 if i == 0:
                     tmp_lr /= LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN
-                c.append(pretraining_fns[i](index=batch_index, lr=tmp_lr))
+                c.append(pretraining_fns[i](batch_x=batch_x, lr=tmp_lr))
             print 'Pre-training layer %i, epoch %d, cost ' % (i, epoch),
             print numpy.mean(c)
         with open(output_file_name + '_layer_' + str(i) + '.pickle', 'w') as f:
@@ -361,74 +316,73 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
     #with open('dbn_Gaussian_gpu_layer_2.pickle') as f:
     #    dbn = cPickle.load(f)
 
-    # get the training, validation and testing function for the model
-    print '... getting the finetuning functions'
-    train_fn, validate_model, test_model = dbn.build_finetune_functions(
-                datasets=datasets, batch_size=batch_size,
-                learning_rate=finetune_lr)
-
-    print '... finetuning the model'
-    # early-stopping parameters
-    patience = 4 * n_train_batches  # look as this many examples regardless
-    patience_increase = 2.    # wait this much longer when a new best is
-                              # found
-    improvement_threshold = 0.995  # a relative improvement of this much is
-                                   # considered significant
-    validation_frequency = min(n_train_batches, patience / 2)
-                                  # go through this many
-                                  # minibatches before checking the network
-                                  # on the validation set; in this case we
-                                  # check every epoch
-
-    best_params = None
-    best_validation_loss = numpy.inf
-    test_score = 0.
-    start_time = time.clock()
-
-    done_looping = False
-    epoch = 0
-
-    print "number of training (fine-tuning) batches", n_train_batches
-    while (epoch < training_epochs) and (not done_looping):
-        epoch = epoch + 1
-        for minibatch_index in xrange(n_train_batches):
-
-            minibatch_avg_cost = train_fn(minibatch_index)
-            iter = epoch * n_train_batches + minibatch_index
-
-            if (iter + 1) % validation_frequency == 0:
-
-                validation_losses = validate_model()
-                this_validation_loss = numpy.mean(validation_losses)
-                print('epoch %i, minibatch %i/%i, validation error %f %%' % \
-                      (epoch, minibatch_index + 1, n_train_batches,
-                       this_validation_loss * 100.))
-
-                # if we got the best validation score until now
-                if this_validation_loss < best_validation_loss:
-                    with open(output_file_name + '.pickle', 'w') as f:
-                        cPickle.dump(dbn, f)
-
-                    #improve patience if loss improvement is good enough
-                    if (this_validation_loss < best_validation_loss *
-                        improvement_threshold):
-                        patience = max(patience, iter * patience_increase)
-
-                    # save best validation score and iteration number
-                    best_validation_loss = this_validation_loss
-                    best_iter = iter
-
-                    # test it on the test set
-                    test_losses = test_model()
-                    test_score = numpy.mean(test_losses)
-                    print(('     epoch %i, minibatch %i/%i, test error of '
-                           'best model %f %%') %
-                          (epoch, minibatch_index + 1, n_train_batches,
-                           test_score * 100.))
-
-            if patience <= iter:
-                done_looping = True
-                break
+#    # get the training, validation and testing function for the model
+#    print '... getting the finetuning functions'
+#    train_fn, validate_model, test_model = dbn.build_finetune_functions(
+#            valid_set=valid_set, test_set=test_set)
+#
+#    print '... finetuning the model'
+#    # early-stopping parameters
+#    patience = 4 * n_train_batches  # look as this many examples regardless
+#    patience_increase = 2.    # wait this much longer when a new best is
+#                              # found
+#    improvement_threshold = 0.995  # a relative improvement of this much is
+#                                   # considered significant
+#    validation_frequency = min(n_train_batches, patience / 2)
+#                                  # go through this many
+#                                  # minibatches before checking the network
+#                                  # on the validation set; in this case we
+#                                  # check every epoch
+#
+#    best_params = None
+#    best_validation_loss = numpy.inf
+#    test_score = 0.
+#    start_time = time.clock()
+#
+#    done_looping = False
+#    epoch = 0
+#
+#    print "number of training (fine-tuning) batches", n_train_batches
+#    while (epoch < training_epochs) and (not done_looping):
+#        epoch = epoch + 1
+#        for minibatch_index in xrange(n_train_batches):
+#
+#            minibatch_avg_cost = train_fn(minibatch_index)
+#            iter = epoch * n_train_batches + minibatch_index
+#
+#            if (iter + 1) % validation_frequency == 0:
+#
+#                validation_losses = validate_model()
+#                this_validation_loss = numpy.mean(validation_losses)
+#                print('epoch %i, minibatch %i/%i, validation error %f %%' % \
+#                      (epoch, minibatch_index + 1, n_train_batches,
+#                       this_validation_loss * 100.))
+#
+#                # if we got the best validation score until now
+#                if this_validation_loss < best_validation_loss:
+#                    with open(output_file_name + '.pickle', 'w') as f:
+#                        cPickle.dump(dbn, f)
+#
+#                    #improve patience if loss improvement is good enough
+#                    if (this_validation_loss < best_validation_loss *
+#                        improvement_threshold):
+#                        patience = max(patience, iter * patience_increase)
+#
+#                    # save best validation score and iteration number
+#                    best_validation_loss = this_validation_loss
+#                    best_iter = iter
+#
+#                    # test it on the test set
+#                    test_losses = test_model()
+#                    test_score = numpy.mean(test_losses)
+#                    print(('     epoch %i, minibatch %i/%i, test error of '
+#                           'best model %f %%') %
+#                          (epoch, minibatch_index + 1, n_train_batches,
+#                           test_score * 100.))
+#
+#            if patience <= iter:
+#                done_looping = True
+#                break
 
     end_time = time.clock()
     print(('Optimization complete with best validation score of %f %%,'

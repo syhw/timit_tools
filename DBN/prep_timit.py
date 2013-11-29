@@ -121,13 +121,12 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, 
         # TODO sample features combinations with LDA? kernels?
 
 
-def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False, 
-        pca_whiten=0, gammatones=False, dataset_name='', speakers=False):
+def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
+        pca_whiten=0, dataset_name='', speakers=False):
     # TODO remove !ENTER !EXIT sil when speakers==True
-    # normalize takes precedence over student's t-stat
     xname = "xdata"
-    if gammatones:
-        xname = "xgamma"
+    if features != 'MFCC':
+        xname = "x" + features
     try:
         train_x = np.load(dataset + "/aligned_train_" + xname + ".npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
@@ -153,17 +152,17 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
     print "train_x shape:", train_x.shape
     print "test_x shape:", test_x.shape
 
-    if unit:
+    if scaling == 'unit':
         ### Putting values on [0-1]
         train_x = (train_x - np.min(train_x, 0)) / np.max(train_x, 0)
         test_x = (test_x - np.min(test_x, 0)) / np.max(test_x, 0)
-        # TODO or do that globally on all data
-    if normalize:
+    elif scaling == 'normalize':
         ### Normalizing (0 mean, 1 variance)
-        # TODO or do that globally on all data
+        # TODO or do that globally on all data (but that would mean to know
+        # the test set and this is cheating!)
         train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
-    elif student: # mutually exclusive
+    elif scaling == 'student':
         ### T-statistic
         train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, ddof=1)
         test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0, ddof=1)
@@ -235,80 +234,92 @@ def prep_data(dataset, nframes=1, unit=False, normalize=False, student=False,
     return [train_x_f, train_y_f, test_x_f, test_y_f]
 
 
-def load_data(dataset, nframes=11, unit=False, normalize=False, student=False, pca_whiten=0, cv_frac=0.2, gammatones=False, dataset_name='timit', speakers=False):
+def load_data(dataset, nframes=13, features='MFCC', scaling='normalize', 
+        pca_whiten=0, cv_frac=0.2, dataset_name='timit_wo_sa', speakers=False,
+        numpy_array_only=False):
     """ 
     params:
      - dataset: folder
      - nframes: number of frames to replicate/pad
-     - unit?: put all the data into [0-1]
-     - normalize?: (X-mean(X))/std(X)
-     - student?: (X-mean(X))/std(X, deg_of_liberty=1)
+     - features: 'MFCC' (13 + D + A = 39) || 'fbank' (40 coeffs filterbanks) 
+                 || 'gamma' (50 coeffs gammatones)
+     - scaling: 'none' || 'unit' (put all the data into [0-1])
+                || 'normalize' ((X-mean(X))/std(X))
+                || student ((X-mean(X))/std(X, deg_of_liberty=1))
      - pca_whiten: not if 0, MLE if < 0, number of components if > 0
      - cv_frac: cross validation fraction on the train set
-     - gammatones?: use gammatones instead of MFCC
+     - dataset_name: prepended to the name of the serialized stuff
+     - speakers: if true, Ys (labels) are speakers instead of phone's states
     """
     params = {'nframes_mfcc': nframes,
-              'unit': unit,
-              'normalize': normalize,
-              'student': student,
+              'features': features,
+              'scaling': scaling,
               'pca_whiten_mfcc_path': 'pca_' + str(pca_whiten) + '.pickle' if pca_whiten else 0,
               'cv_frac': cv_frac,
               'theano_borrow?': BORROW,
               'use_caching?': USE_CACHING,
               'train_classifiers_1_frame?': TRAIN_CLASSIFIERS_1_FRAME,
               'train_classifiers?': TRAIN_CLASSIFIERS,
-              'gammatones?': gammatones,
-              'dataset_name': dataset_name}
+              'dataset_name': dataset_name,
+              'speakers?': speakers}
     with open('prep_' + dataset_name + '_params.json', 'w') as f:
         f.write(json.dumps(params))
 
-    gamma = "" # for filenames / caching
-    if gammatones:
-        gamma = "gamma_" # for filenames / caching
 
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y] = prep_data(dataset, 
-                nframes=nframes, unit=unit, normalize=normalize, 
-                student=student, pca_whiten=pca_whiten, gammatones=gammatones,
-                dataset_name=dataset_name, speakers=speakers)
-        with open('train_x_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
+                nframes=nframes, features=features, scaling=scaling,
+                pca_whiten=pca_whiten, dataset_name=dataset_name,
+                speakers=speakers)
+        with open('train_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
             np.save(f, train_x)
-        with open('train_y_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
+        with open('train_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
             np.save(f, train_y)
-        with open('test_x_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
+        with open('test_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
             np.save(f, test_x)
-        with open('test_y_' + dataset_name + '_' + gamma + str(nframes) + '.npy', 'w') as f:
+        with open('test_y_' + dataset_name + '_' + features + str(nframes) + scaling +'.npy', 'w') as f:
             np.save(f, test_y)
         print ">>> Serialized all train/test tables"
         return [train_x, train_y, test_x, test_y]
 
     if USE_CACHING:
         try: # try to load from serialized filed, beware
-            with open('train_x_' + dataset_name + '_' + gamma + str(nframes) + '.npy') as f:
+            with open('train_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 train_x = np.load(f)
-            with open('train_y_' + dataset_name + '_' + gamma +  str(nframes) + '.npy') as f:
+            with open('train_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 train_y = np.load(f)
-            with open('test_x_' + dataset_name + '_' + gamma +  str(nframes) + '.npy') as f:
+            with open('test_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 test_x = np.load(f)
-            with open('test_y_' + dataset_name + '_' + gamma +  str(nframes) + '.npy') as f:
+            with open('test_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 test_y = np.load(f)
         except: # do the whole preparation (normalization / padding)
             [train_x, train_y, test_x, test_y] = prep_and_serialize()
     else:
         [train_x, train_y, test_x, test_y] = prep_and_serialize()
 
-    # TODO with fixed dev test (/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/)
     from sklearn import cross_validation
-    X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=cv_frac, random_state=0)
-    train_set_x = theano.shared(X_train, borrow=BORROW)
-    train_set_y = theano.shared(np.asarray(y_train, dtype=theano.config.floatX), borrow=BORROW)
-    train_set_y = T.cast(train_set_y, 'int32')
-    val_set_x = theano.shared(X_validate, borrow=BORROW)
-    val_set_y = theano.shared(np.asarray(y_validate, dtype=theano.config.floatX), borrow=BORROW)
-    val_set_y = T.cast(val_set_y, 'int32')
-    test_set_x = theano.shared(test_x, borrow=BORROW)
-    test_set_y = theano.shared(np.asarray(test_y, dtype=theano.config.floatX), borrow=BORROW)
-    test_set_y = T.cast(test_set_y, 'int32')
+    if cv_frac == 'fixed':
+        pass
+        # TODO with fixed dev test (/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/)
+    else:
+        X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=cv_frac, random_state=0)
+    if numpy_array_only:
+        train_set_x = X_train
+        train_set_y = np.asarray(y_train, dtype='int32')
+        val_set_x = X_validate
+        val_set_y = np.asarray(y_validate, dtype='int32')
+        test_set_x = test_x
+        test_set_y = np.asarray(test_y, dtype='int32')
+    else:
+        train_set_x = theano.shared(X_train, borrow=BORROW)
+        train_set_y = theano.shared(np.asarray(y_train, dtype=theano.config.floatX), borrow=BORROW)
+        train_set_y = T.cast(train_set_y, 'int32')
+        val_set_x = theano.shared(X_validate, borrow=BORROW)
+        val_set_y = theano.shared(np.asarray(y_validate, dtype=theano.config.floatX), borrow=BORROW)
+        val_set_y = T.cast(val_set_y, 'int32')
+        test_set_x = theano.shared(test_x, borrow=BORROW)
+        test_set_y = theano.shared(np.asarray(test_y, dtype=theano.config.floatX), borrow=BORROW)
+        test_set_y = T.cast(test_set_y, 'int32')
 
     return [(train_set_x, train_set_y), 
             (val_set_x, val_set_y),
