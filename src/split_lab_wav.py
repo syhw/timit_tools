@@ -122,11 +122,11 @@ def split_in(folder, split_phones):
         print "did", lab_fname
         # some cleaning now:
         os.remove(lab_fname)
-        if os.path.isfile(mfc_name):
+        if os.path.isfile(mfc_fname):
             os.remove(mfc_fname)
-        if os.path.isfile(wav_name):
+        if os.path.isfile(wav_fname):
             os.remove(wav_fname)
-        if os.path.isfile(raw_name):
+        if os.path.isfile(raw_fname):
             os.remove(raw_fname)
         os.remove(phones_fname)
 
