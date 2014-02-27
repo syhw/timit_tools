@@ -8,7 +8,8 @@ MFCC_FRAMERATE = 10000000 # 10ms MFCC framerate (in nanoseconds)
 MFCC_FRAMES_PER_SECOND = ONE_S/MFCC_FRAMERATE
 MIN_PHONES = 4
 assert(MIN_PHONES >= 1)
-N_ENTER_EXIT_FRAMES = 5 # number of !ENTER and !EXIT frames, currently this adds NOISE
+N_ENTER_EXIT_FRAMES = 0 # number of !ENTER and !EXIT frames, currently this adds NOISE
+#N_ENTER_EXIT_FRAMES = 5 # number of !ENTER and !EXIT frames, currently this adds NOISE
                         # see TODO in wave_split()
 
 usage = """python src/split_lab_mfc.py $folder $phone1 [$phone2] [$phone3]
@@ -35,6 +36,7 @@ def wave_split(start, end, wavfname, compt):
 
     interval = sample[start_in_frames:end_in_frames]
     if interval.shape[0] == 0:
+        # do not do this start/end split
         return -1
     max_volume = np.max(interval)
     ###wavefile.readframes(start_in_frames) # skipping to start
@@ -116,8 +118,9 @@ def split_in(folder, split_phones):
                         if wave_split(start, end, wav_fname, compt) != 0:
                             print "ERROR with:", start, end, wav_fname, compt
                             break
-                        write_lab(buffer, lab_fname, compt)
-                        compt += 1
+                        else:
+                            write_lab(buffer, lab_fname, compt)
+                            compt += 1
                     buffer = [(int(s), int(e), p)]
         print "did", lab_fname
         # some cleaning now:
@@ -128,7 +131,8 @@ def split_in(folder, split_phones):
             os.remove(wav_fname)
         if os.path.isfile(raw_fname):
             os.remove(raw_fname)
-        os.remove(phones_fname)
+        if os.path.isfile(phones_fname):
+            os.remove(phones_fname)
 
 
 if __name__ == '__main__':
