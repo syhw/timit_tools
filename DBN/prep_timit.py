@@ -142,7 +142,7 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
     # TODO remove !ENTER !EXIT sil when speakers==True
     xname = "xdata"
     if features != 'MFCC':
-        xname = "x" + features
+        xname = "x" + features  # e.g. 'xfbank'
     try:
         train_x = np.load(dataset + "/aligned_train_" + xname + ".npy")
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")

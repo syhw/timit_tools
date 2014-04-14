@@ -4,7 +4,6 @@ from numpy.testing import assert_allclose
 import htkmfc
 # for the filterbanks
 from scipy.io import wavfile
-from scikits.talkbox.features import mfcc as tbmfcc
 # for the gammatones
 from brian import Hz, log10
 from brian.hears import loadsound, erbspace, Gammatone, ApproximateGammatone
@@ -21,6 +20,10 @@ HAMMING_SIZE = 25 # 25 ms
 N_MFCC_COEFFS = 39 # as in Mohamed et al. / Dahl et al. (Hinton group) papers
 N_FILTERBANK_COEFFS = 40 # as in Acoustic Modeling using Deep Belief Networks
                          # Mohamed et al.
+TALKBOX_FBANKS = False
+if TALKBOX_FBANKS:
+    from scikits.talkbox.features import mfcc as tbmfcc
+DEBUG = False
 
 N_GAMMATONES = 50 # c.f. http://www.briansimulator.org/docs/hears.html
                   # and http://www.briansimulator.org/docs/examples-hears_approximate_gammatone.html#example-hears-approximate-gammatone
@@ -70,7 +73,7 @@ def extract_from_mlf(mlf, do_gammatones):
             line = line.rstrip('\n')
             if len(line) < 1:
                 continue
-            if line[0] == '"': # TODO remove SA
+            if line[0] == '"':
                 assert tmp_len_x == 0, "the file above this one %s was mismatching x (%d frames) and y (%d frames) lengths by %d" % (line, 
                         len_x, end, tmp_len_x)
                 speaker_label = line.split('/')[-2]
@@ -81,12 +84,23 @@ def extract_from_mlf(mlf, do_gammatones):
                 len_x = t.getall().shape[0]
                 tmp_len_x = len_x
 
-                # do our own filterbanks
-                fr, snd = wavfile.read(line.strip('"')[:-3] + 'wav') # .lab -> .wav
-                assert fr == SAMPLING_RATE, "SAMPLING_RATE is not what is found in the wav file"
-                _, fbank, _ = tbmfcc(snd, nwin=HAMMING_SIZE/1000.*SAMPLING_RATE, nfft=2048, fs=SAMPLING_RATE, nceps=13)
-                x_fbank = np.append(x_fbank, fbank, axis=0)
-                assert t.getall().shape[0] == fbank.shape[0], "MFCC and filterbank not of the same length (not on the same sampling rate)"
+                if TALKBOX_FBANKS:  # do our own filterbanks TODO
+                    fr, snd = wavfile.read(line.strip('"')[:-3] + 'wav') # .lab -> .wav
+                    assert fr == SAMPLING_RATE, "SAMPLING_RATE is not what is found in the wav file"
+                    _, fbank, _ = tbmfcc(snd, nwin=HAMMING_SIZE/1000.*SAMPLING_RATE, nfft=2048, fs=SAMPLING_RATE, nceps=13)
+                    x_fbank = np.append(x_fbank, fbank, axis=0)
+                    assert t.getall().shape[0] == fbank.shape[0], "MFCC and filterbank not of the same length (not on the same sampling rate)"
+                else:
+                    fbank = None
+                    with open(line.strip('"')[:-4] + '_fbanks.npy') as fbanksf:
+                        fbank = np.load(fbanksf)
+                    if fbank != None:
+                        # it seems filterbanks obtained with spectral are a little longer at the end
+                        if DEBUG:
+                            print "cutting the last", fbank.shape[0] - t.getall().shape[0], "frames from the filterbank"
+                        fbank = fbank[:t.getall().shape[0]]
+                        x_fbank = np.append(x_fbank, fbank, axis=0)
+                        assert t.getall().shape[0] == fbank.shape[0], "MFCC and filterbank not of the same length (not on the same sampling rate)"
 
                 if do_gammatones:
                     # load the wav sound (with Brian)
