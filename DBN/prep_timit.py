@@ -1,69 +1,77 @@
 import theano, copy, sys, json, cPickle
 import theano.tensor as T
 import numpy as np
+from numpy import zeros, pad
 
 BORROW = True # True makes it faster with the GPU
-USE_CACHING = True # beware if you use RBM / GRBM or gammatones / speaker labels alternatively, set it to False
+USE_CACHING = True # beware if you use RBM / GRBM or gammatones /
+                   # speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
 prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
 
 def padding(nframes, x, y):
-    # dirty hacky padding
-    ba = (nframes - 1) / 2 # before // after
-    x2 = copy.deepcopy(x)
-    on_x2 = False
-    x_f = np.zeros((x.shape[0], nframes * x.shape[1]), dtype='float32')
+    """ Dirty hacky padding for a minimum of nframes """
+    b_a = (nframes - 1) / 2 # before // after
+    x_2 = copy.deepcopy(x)
+    on_x_2 = False
+    x_f = zeros((x.shape[0], nframes * x.shape[1]), dtype='float32')
     for i in xrange(x.shape[0]):
         if y[i] == '!ENTER[2]' and y[i-1] != '!ENTER[2]': # TODO general case
-            on_x2 = not on_x2
-            if on_x2:
-                x2[i - ba:i,:] = 0.0
+            on_x_2 = not on_x_2
+            if on_x_2:
+                x_2[i - b_a:i, :] = 0.0
             else:
-                x[i - ba:i,:] = 0.0
-        if i+ba < y.shape[0] and '!EXIT' in y[i] and not '!EXIT' in y[i+ba]: # TODO general
-            if on_x2:
-                x2[i+ba:i+2*ba+1,:] = 0.0
+                x[i - b_a:i, :] = 0.0
+        if i+b_a < y.shape[0] and '!EXIT' in y[i] and not '!EXIT' in y[i+b_a]:
+            # TODO general case
+            if on_x_2:
+                x_2[i+b_a:i+2*b_a+1, :] = 0.0
             else:
-                x[i+ba:i+2*ba+1,:] = 0.0
-        if on_x2:
-            x_f[i] = np.pad(x2[max(0, i - ba):i + ba + 1].flatten(),
-                    (max(0, (ba - i) * x.shape[1]), 
-                        max(0, ((i+ba+1) - x.shape[0]) * x.shape[1])),
-                    'constant', constant_values=(0,0))
+                x[i+b_a:i+2*b_a+1, :] = 0.0
+        if on_x_2:
+            x_f[i] = pad(x_2[max(0, i - b_a):i + b_a + 1].flatten(),
+                    (max(0, (b_a - i) * x.shape[1]),
+                        max(0, ((i+b_a+1) - x.shape[0]) * x.shape[1])),
+                    'constant', constant_values=(0, 0))
         else:
-            x_f[i] = np.pad(x[max(0, i - ba):i + ba + 1].flatten(),
-                    (max(0, (ba - i) * x.shape[1]), 
-                        max(0, ((i+ba+1) - x.shape[0]) * x.shape[1])),
-                    'constant', constant_values=(0,0))
+            x_f[i] = pad(x[max(0, i - b_a):i + b_a + 1].flatten(),
+                    (max(0, (b_a - i) * x.shape[1]),
+                        max(0, ((i+b_a+1) - x.shape[0]) * x.shape[1])),
+                    'constant', constant_values=(0, 0))
     return x_f
 
-def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, dataset_name='', classifiers=['lda'], nframes_mfcc=1):
-    print("size of input layer (== dimension of the features space) %d" % train_x.shape[1])
+def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False,
+        dataset_name='', classifiers=['lda'], nframes_mfcc=1):
+    """ train classifiers on the features to look at baseline classifications
+    """
+    print("size of input layer (== dimension of the features space) %d"
+            % train_x.shape[1])
     ### Training a SVM to compare results TODO
-    #print "training a SVM" TODO
     if 'sgd' in classifiers:
         ### Training a linear model (elasticnet) to compare results
         print("*** training a linear model with SGD ***")
         from sklearn import linear_model
         from sklearn.cross_validation import cross_val_score
-        clf = linear_model.SGDClassifier(loss='modified_huber', penalty='elasticnet') # TODO change and CV params
+        clf = linear_model.SGDClassifier(loss='modified_huber',
+                penalty='elasticnet') # TODO change and CV params
         clf.fit(train_x, train_y_f)
         scores = cross_val_score(clf, test_x, test_y_f)
         print "score linear classifier (elasticnet, SGD trained)", scores.mean()
-        with open('linear_elasticnet_classif.pickle', 'w') as f:
-            cPickle.dump(clf, f)
+        with open('linear_elasticnet_classif.pickle', 'w') as w_f:
+            cPickle.dump(clf, w_f)
 
     if 'rf' in classifiers:
         ### Training a random forest to compare results
         print("*** training a random forest ***")
         from sklearn.ensemble import RandomForestClassifier
-        clf2 = RandomForestClassifier(n_jobs=-1, max_features='log2', min_samples_split=3) # TODO change and CV params
+        clf2 = RandomForestClassifier(n_jobs=-1, max_features='log2',
+                min_samples_split=3) # TODO change and CV params
         clf2.fit(train_x, train_y_f)
         scores2 = cross_val_score(clf2, test_x, test_y_f)
         print "score random forest", scores2.mean()
         ###with open('random_forest_classif.pickle', 'w') as f: TODO TODO TODO
-        ###    cPickle.dump(clf2, f)  TODO TODO TODO 
+        ###    cPickle.dump(clf2, f)  TODO TODO TODO
 
     if 'lda' in classifiers:
         print "*** training a linear discriminant classifier ***"
@@ -71,29 +79,36 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, 
         from sklearn.metrics import confusion_matrix
         from sklearn import cross_validation
 
-        def lda_on(train_x, train_y, test_x, test_y, feats_name='all_features'):
+        def lda_on(train_x, train_y, test_x, test_y,
+                feats_name='all_features'):
+            """ Linear Discriminant Analysis """
             lda = LDA()
             lda.fit(train_x, train_y, store_covariance=True)
             print feats_name, "(train):", lda.score(train_x, train_y)
             print feats_name, "(test):", lda.score(test_x, test_y)
-            with open(dataset_name + '_lda_classif_' + feats_name + '.pickle', 'w') as f:
-                cPickle.dump(lda, f)
+            with open(dataset_name + '_lda_classif_' + feats_name + '.pickle',
+                    'w') as w_f:
+                cPickle.dump(lda, w_f)
             y_pred = lda.predict(test_x)
-            X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=0.2, random_state=0)
+            X_train, X_validate, y_train, y_validate = cross_validation\
+                    .train_test_split(train_x, train_y, test_size=0.2,
+                            random_state=0)
             lda.fit(X_train, y_train)
             print feats_name, "(validation):", lda.score(X_validate, y_validate)
             y_pred_valid = lda.predict(X_validate)
             cm_test = confusion_matrix(test_y, y_pred)
             cm_valid = confusion_matrix(y_validate, y_pred_valid)
             np.set_printoptions(threshold='nan')
-            with open("cm_test" + feats_name + ".txt", 'w') as wf:
-                print >> wf, cm_test
-            with open("cm_valid" + feats_name + ".txt", 'w') as wf:
-                print >> wf, cm_valid
+            with open("cm_test" + feats_name + ".txt", 'w') as w_f:
+                print >> w_f, cm_test
+            with open("cm_valid" + feats_name + ".txt", 'w') as w_f:
+                print >> w_f, cm_valid
 
         if articulatory:
-            lda_on(train_x[:,:39*nframes_mfcc], train_y_f, test_x[:,:39*nframes_mfcc], test_y_f, feats_name='mfcc')
-            lda_on(train_x[:,39*nframes_mfcc:], train_y_f, test_x[:,39*nframes_mfcc:], test_y_f, feats_name='arti')
+            lda_on(train_x[:, :39*nframes_mfcc], train_y_f,
+                    test_x[:, :39*nframes_mfcc], test_y_f, feats_name='mfcc')
+            lda_on(train_x[:, 39*nframes_mfcc:], train_y_f,
+                    test_x[:, 39*nframes_mfcc:], test_y_f, feats_name='arti')
         else:
             lda_on(train_x, train_y_f, test_x, test_y_f, feats_name='both')
 
@@ -101,8 +116,8 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, 
         ### Feature selection
         print("*** feature selection now: ***")
         print(" - Feature importances for the random forest classifier")
-        print clf2.feature_importances_
-        from sklearn.feature_selection import SelectPercentile, f_classif 
+        print clf2.feature_importances
+        from sklearn.feature_selection import SelectPercentile, f_classif
         # SelectKBest TODO?
         selector = SelectPercentile(f_classif, percentile=10) # ANOVA
         selector.fit(train_x, train_y_f)
@@ -112,7 +127,7 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, 
         print(" - ANOVA scoring (order of the MFCC)")
         print scores
         from sklearn.feature_selection import RFECV
-        print(" - Recursive feature elimination with cross-validation with LDA")
+        print(" - Recursive feature elimination with cross-validation w/ LDA")
         lda = LDA()
         rfecv = RFECV(estimator=lda, step=1, scoring='accuracy')
         rfecv.fit(train_x, train_y_f)
@@ -124,6 +139,7 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False, 
 
 def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
         pca_whiten=0, dataset_name='', speakers=False):
+    """ prepare data from the dataset folder """
     # TODO remove !ENTER !EXIT sil when speakers==True
     xname = "xdata"
     if features != 'MFCC':
@@ -219,11 +235,11 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
         cPickle.dump((to_int, to_state), f)
 
     print "preparing / int mapping Ys"
-    train_y_f = np.zeros(train_y.shape[0], dtype='int32')
+    train_y_f = zeros(train_y.shape[0], dtype='int32')
     for i, e in enumerate(train_y):
         train_y_f[i] = to_int[e]
 
-    test_y_f = np.zeros(test_y.shape[0], dtype='int32')
+    test_y_f = zeros(test_y.shape[0], dtype='int32')
     for i, e in enumerate(test_y):
         test_y_f[i] = to_int[e]
 
