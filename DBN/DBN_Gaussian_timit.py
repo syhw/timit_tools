@@ -12,6 +12,7 @@ import theano
 import theano.tensor as T
 from theano.tensor.shared_randomstreams import RandomStreams
 from theano import shared
+from collections import OrderedDict
 
 from logistic_timit import LogisticRegression 
 from mlp import HiddenLayer
@@ -22,11 +23,12 @@ from prep_timit import load_data
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
 DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
+#DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split'
 N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-output_file_name = 'dbn_2496_units'
+output_file_name = 'dbn_2496_units_analyze'
 
 
 class DBN(object):
@@ -243,7 +245,7 @@ class DBN(object):
         gparams = T.grad(self.finetune_cost, self.params)
 
         # compute list of fine-tuning updates
-        updates = {}
+        updates = OrderedDict()
         for param, gparam in zip(self.params, gparams):
             updates[param] = param - gparam * learning_rate
 
@@ -278,9 +280,9 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
-             pretrain_lr=0.01, k=1, training_epochs=100, # TODO 100+
-             dataset=DATASET, batch_size=200):
+def train_DBN(finetune_lr=0.005, pretraining_epochs=10,
+             pretrain_lr=0.01, k=1, training_epochs=100,
+             dataset=DATASET, batch_size=100):
     """
 
     :type learning_rate: float
@@ -403,6 +405,11 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
                 print('epoch %i, minibatch %i/%i, validation error %f %%' % \
                       (epoch, minibatch_index + 1, n_train_batches,
                        this_validation_loss * 100.))
+                ##############################
+                for layer_ind in xrange(dbn.n_layers):
+                    print('>>> (cross-val, test) error rate of a LogisticRegression on top of layer %d is' % layer_ind)
+                    print(pretraining_eval_fns[layer_ind]())
+                ##############################
 
                 # if we got the best validation score until now
                 if this_validation_loss < best_validation_loss:
@@ -443,4 +450,22 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
 
 
 if __name__ == '__main__':
-    test_DBN()
+    if len(sys.argv) > 1:
+        usage = """usage: python DBN_analyze_timit $pretrain_lr $pretrain_epochs $finetune_lr $finetune_epochs $k(for_CD) [dbn_load_from.pickle]"""
+        print usage
+        load_from = ''
+        if len(sys.argv) > 6:
+            load_from = sys.argv[6]
+        plr, pep, flr, fep, k = sys.argv[1:6]
+        plr = float(plr)
+        pep = int(pep)
+        flr = float(flr)
+        fep = int(fep)
+        k = int(k)
+        tmp = '_plr%.1E_pep%d_flr%.1E_fep%d_k%d' % (plr, pep, flr, fep, k)
+        output_file_name = output_file_name + tmp
+        train_DBN(finetune_lr=flr, pretraining_epochs=pep,
+             pretrain_lr=plr, k=k, training_epochs=fep,
+             dataset=DATASET, batch_size=100)
+    else:
+        train_DBN()
