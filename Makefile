@@ -1,26 +1,31 @@
-TMP_TRAIN_FOLDER=tmp_TIMIT_wo_sa
+TMP_TRAIN_FOLDER=tmp_TIMIT_train_dev_test
+#TMP_TRAIN_FOLDER=tmp_TIMIT_wo_sa
 
 help:
 	@echo -e "Usage (in order):"
-	@echo -e "make prepare dataset=~/postdoc/datasets/TIMIT"
-	@echo -e "make train dataset_train_folder=~/postdoc/datasets/TIMIT/train"
-	@echo -e "make test dataset_test_folder=~/postdoc/datasets/TIMIT/test"
+	@echo -e "make prepare dataset=~/postdoc/datasets/TIMIT/train_dev_test_split"
+	@echo -e "make train dataset_train_folder=~/postdoc/datasets/TIMIT/train_dev_test_split/train"
+	@echo -e "make test dataset_test_folder=~/postdoc/datasets/TIMIT/train_dev_test_split/test"
 
 
 prepare_timit: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo -e "*** preparing the dataset for phones recognition ***"
-	@echo -e "\n>>> produce MFCC from WAV files\n"
+	@echo -e "\n>>> produce MFCC and filterbanks from WAV files\n"
 	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/dev
 	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
 	@echo -e "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
 	python src/timit_to_htk_labels.py $(dataset)/train
+	python src/timit_to_htk_labels.py $(dataset)/dev
 	python src/timit_to_htk_labels.py $(dataset)/test
 	@echo -e "\n>>> substitute phones (61 down to 39 if using timit_foldings.json) \n"
 	@echo -e ">>> Here we are just putting the !ENTER and !EXIT symbols\n"
 	python src/substitute_phones.py $(dataset)/train --sentences
+	python src/substitute_phones.py $(dataset)/dev --sentences
 	python src/substitute_phones.py $(dataset)/test --sentences
 	@echo -e "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
+	python src/create_phonesMLF_list_labels.py $(dataset)/dev
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
 
 
@@ -72,17 +77,28 @@ prepare_buckeye:
 	#rm -rf $(dataset)/train/s39/ # that's a fix because of several corrupted waves
 	@echo -e "\ndataset is now $(dataset)"
 	@echo -e "\n>>> split the WAV and LAB files on IVER (other interlocutor)\n"
-	python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE
-	python src/split_lab_wav.py $(dataset)/test IVER VOCNOISE
+	#python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE 
+	#python src/split_lab_wav.py $(dataset)/test IVER VOCNOISE
+	python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN 
+	python src/split_lab_wav.py $(dataset)/test IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN
 	@echo -e "\n>>> put !ENTER and !EXIT symbols and substitute phones\n"
-	python src/substitute_phones.py $(dataset)/train --sentences buckeye_foldings.json
-	python src/substitute_phones.py $(dataset)/test --sentences buckeye_foldings.json
+	#python src/substitute_phones.py $(dataset)/train --sentences buckeye_foldings.json
+	#python src/substitute_phones.py $(dataset)/test --sentences buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/train buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/test buckeye_foldings.json
 	@echo -e "\n>>> produce MFCC from WAV files\n"
 	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
 	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
 	@echo -e "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
+
+
+prepare_WSJ0:
+	@echo -e "*** preparing the dataset for phones recognition ***"
+	@echo -e "\n>>> produce MFCC and filterbanks from WAV files\n"
+	sph2pipe -f raw <in> -f wav <out>
+
 
 
 train: train_monophones

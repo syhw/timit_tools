@@ -220,7 +220,7 @@ class DBN(object):
 
             # compile the theano function
             fn = theano.function(inputs=[index,
-                            theano.Param(learning_rate, default=0.1)],
+                            theano.Param(learning_rate, default=0.01)],
                                  outputs=cost,
                                  updates=updates,
                                  givens={self.x:
@@ -385,7 +385,7 @@ class DBN(object):
 
 def train_DBN(finetune_lr=0.01, pretraining_epochs=100,
              pretrain_lr=0.001, k=1, training_epochs=200,
-             dataset=DATASET, batch_size=20, dbn_load_from=''):
+             dataset=DATASET, batch_size=100, dbn_load_from=''):
     """
 
     :type learning_rate: float
@@ -405,11 +405,7 @@ def train_DBN(finetune_lr=0.01, pretraining_epochs=100,
     """
 
     print "loading dataset from", dataset
-    ###datasets = load_data(dataset, nframes=N_FRAMES, unit=False, normalize=True, pca_whiten=True, cv_frac=0.0)
-    datasets = load_data(dataset, nframes=N_FRAMES, unit=False, student=True, pca_whiten=False, cv_frac=0.15, dataset_name='TIMIT_std', speakers=SPEAKERS)
-    # unit=False because we don't want the [0-1] binary RBM projection
-    # normalize=True because we want the data to be 0 centered with 1 variance.
-    # pca_whiten=True because we want the data to be decorrelated
+    datasets = load_data(dataset, nframes=N_FRAMES, features='MFCC', scaling='normalize', pca_whiten=False, cv_frac=0.2, dataset_name='TIMIT_wo_sa', speakers=SPEAKERS)
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1] 
@@ -435,7 +431,7 @@ def train_DBN(finetune_lr=0.01, pretraining_epochs=100,
     print "train_set_x.shape.eval()", train_set_x.shape.eval()
     assert(train_set_x.shape[1].eval() == N_FRAMES * 39) # check
     dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1].eval(),
-              hidden_layers_sizes=[1248, 1248, 1248],
+              hidden_layers_sizes=[2496, 2496, 2496],
               n_outs=N_OUTS)
 
     #########################
@@ -602,8 +598,8 @@ def train_DBN(finetune_lr=0.01, pretraining_epochs=100,
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    #with open(output_file_name + '.pickle', 'w') as f:
-    #    cPickle.dump(dbn, f)
+    with open(output_file_name + '.pickle', 'w') as f:
+        cPickle.dump(dbn, f)
 
 
 if __name__ == '__main__':
@@ -623,6 +619,6 @@ if __name__ == '__main__':
         output_file_name = output_file_name + tmp
         train_DBN(finetune_lr=flr, pretraining_epochs=pep,
              pretrain_lr=plr, k=k, training_epochs=fep,
-             dataset=DATASET, batch_size=20, dbn_load_from=load_from)
+             dataset=DATASET, batch_size=100, dbn_load_from=load_from)
     else:
         train_DBN()

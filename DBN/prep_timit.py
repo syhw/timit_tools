@@ -6,6 +6,7 @@ BORROW = True # True makes it faster with the GPU
 USE_CACHING = True # beware if you use RBM / GRBM or gammatones / speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
+prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
 
 def padding(nframes, x, y):
     # dirty hacky padding
@@ -271,26 +272,26 @@ def load_data(dataset, nframes=13, features='MFCC', scaling='normalize',
                 nframes=nframes, features=features, scaling=scaling,
                 pca_whiten=pca_whiten, dataset_name=dataset_name,
                 speakers=speakers)
-        with open('train_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
+        with open(prefix_path + 'train_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
             np.save(f, train_x)
-        with open('train_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
+        with open(prefix_path + 'train_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
             np.save(f, train_y)
-        with open('test_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
+        with open(prefix_path + 'test_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
             np.save(f, test_x)
-        with open('test_y_' + dataset_name + '_' + features + str(nframes) + scaling +'.npy', 'w') as f:
+        with open(prefix_path + 'test_y_' + dataset_name + '_' + features + str(nframes) + scaling +'.npy', 'w') as f:
             np.save(f, test_y)
         print ">>> Serialized all train/test tables"
         return [train_x, train_y, test_x, test_y]
 
     if USE_CACHING:
         try: # try to load from serialized filed, beware
-            with open('train_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
+            with open(prefix_path + 'train_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 train_x = np.load(f)
-            with open('train_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
+            with open(prefix_path + 'train_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 train_y = np.load(f)
-            with open('test_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
+            with open(prefix_path + 'test_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 test_x = np.load(f)
-            with open('test_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
+            with open(prefix_path + 'test_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 test_y = np.load(f)
         except: # do the whole preparation (normalization / padding)
             [train_x, train_y, test_x, test_y] = prep_and_serialize()
