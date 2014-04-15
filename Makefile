@@ -11,9 +11,9 @@ help:
 prepare_timit: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
 	@echo -e "*** preparing the dataset for phones recognition ***"
 	@echo -e "\n>>> produce MFCC and filterbanks from WAV files\n"
-	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
-	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/dev
-	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext --filterbanks $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext --filterbanks $(dataset)/dev
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext --filterbanks $(dataset)/test
 	@echo -e "\n>>> transform .phn files into .lab files (frames into nanoseconds)\n"
 	python src/timit_to_htk_labels.py $(dataset)/train
 	python src/timit_to_htk_labels.py $(dataset)/dev
@@ -324,6 +324,7 @@ all_timit:
 	make bigram_LM
 	make test_monophones_bigram_LM dataset_test_folder=$(dataset)/test
 	make align input_scp=$(dataset)/train/train.scp input_mlf=$(dataset)/train/train.mlf output_mlf=$(dataset)/aligned_train.mlf
+	make align input_scp=$(dataset)/dev/dev.scp input_mlf=$(dataset)/dev/dev.mlf output_mlf=$(dataset)/aligned_dev.mlf
 	make align input_scp=$(dataset)/test/test.scp input_mlf=$(dataset)/test/test.mlf output_mlf=$(dataset)/aligned_test.mlf
 
 
