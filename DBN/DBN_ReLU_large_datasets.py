@@ -19,13 +19,15 @@ from prep_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
-DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/wo_sa'
-N_FRAMES = 23  # HAS TO BE AN ODD NUMBER 
+#DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/wo_sa'
+DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
+N_FEATURES = 40  # filterbanks
+N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
 LEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
 BORROW = True
-output_file_name = 'dbn_ReLu_2496_units_23_frames'
+output_file_name = 'dbn_ReLu_2496_units_13_frames'
 
 
 class DatasetIterator(object):
@@ -57,7 +59,7 @@ class DBN(object):
     regression layer on top.
     """
 
-    def __init__(self, numpy_rng, theano_rng=None, n_ins=39 * N_FRAMES,
+    def __init__(self, numpy_rng, theano_rng=None, n_ins=N_FEATURES * N_FRAMES,
                  hidden_layers_sizes=[1024, 1024], n_outs=62 * 3):
         """This class is made to support a variable number of layers.
 
@@ -236,7 +238,7 @@ class DBN(object):
         return train_fn, valid_score, test_score
 
 
-def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
+def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
              pretrain_lr=0.01, k=1, training_epochs=100, # TODO 100+
              dataset=DATASET, batch_size=100):
     """
@@ -258,9 +260,10 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
     """
 
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='normalize', cv_frac=0.2, speakers=False, numpy_array_only=True) 
+    #datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='normalize', cv_frac=0.2, speakers=False, numpy_array_only=True) 
+    datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='student', cv_frac='fixed', speakers=True, numpy_array_only=True) 
 
-    train_set_x, train_set_y = datasets[0]
+    train_set_x, train_set_y = datasets[0]  # if speakers, do test/test/test
     valid_set_x, valid_set_y = datasets[1] 
     test_set_x, test_set_y = datasets[2]
     print "dataset loaded!"
@@ -316,73 +319,73 @@ def test_DBN(finetune_lr=0.005, pretraining_epochs=10, # TODO 100+
     #with open('dbn_Gaussian_gpu_layer_2.pickle') as f:
     #    dbn = cPickle.load(f)
 
-#    # get the training, validation and testing function for the model
-#    print '... getting the finetuning functions'
-#    train_fn, validate_model, test_model = dbn.build_finetune_functions(
-#            valid_set=valid_set, test_set=test_set)
-#
-#    print '... finetuning the model'
-#    # early-stopping parameters
-#    patience = 4 * n_train_batches  # look as this many examples regardless
-#    patience_increase = 2.    # wait this much longer when a new best is
-#                              # found
-#    improvement_threshold = 0.995  # a relative improvement of this much is
-#                                   # considered significant
-#    validation_frequency = min(n_train_batches, patience / 2)
-#                                  # go through this many
-#                                  # minibatches before checking the network
-#                                  # on the validation set; in this case we
-#                                  # check every epoch
-#
-#    best_params = None
-#    best_validation_loss = numpy.inf
-#    test_score = 0.
-#    start_time = time.clock()
-#
-#    done_looping = False
-#    epoch = 0
-#
-#    print "number of training (fine-tuning) batches", n_train_batches
-#    while (epoch < training_epochs) and (not done_looping):
-#        epoch = epoch + 1
-#        for minibatch_index in xrange(n_train_batches):
-#
-#            minibatch_avg_cost = train_fn(minibatch_index)
-#            iter = epoch * n_train_batches + minibatch_index
-#
-#            if (iter + 1) % validation_frequency == 0:
-#
-#                validation_losses = validate_model()
-#                this_validation_loss = numpy.mean(validation_losses)
-#                print('epoch %i, minibatch %i/%i, validation error %f %%' % \
-#                      (epoch, minibatch_index + 1, n_train_batches,
-#                       this_validation_loss * 100.))
-#
-#                # if we got the best validation score until now
-#                if this_validation_loss < best_validation_loss:
-#                    with open(output_file_name + '.pickle', 'w') as f:
-#                        cPickle.dump(dbn, f)
-#
-#                    #improve patience if loss improvement is good enough
-#                    if (this_validation_loss < best_validation_loss *
-#                        improvement_threshold):
-#                        patience = max(patience, iter * patience_increase)
-#
-#                    # save best validation score and iteration number
-#                    best_validation_loss = this_validation_loss
-#                    best_iter = iter
-#
-#                    # test it on the test set
-#                    test_losses = test_model()
-#                    test_score = numpy.mean(test_losses)
-#                    print(('     epoch %i, minibatch %i/%i, test error of '
-#                           'best model %f %%') %
-#                          (epoch, minibatch_index + 1, n_train_batches,
-#                           test_score * 100.))
-#
-#            if patience <= iter:
-#                done_looping = True
-#                break
+    # get the training, validation and testing function for the model
+    print '... getting the finetuning functions'
+    train_fn, validate_model, test_model = dbn.build_finetune_functions(
+            valid_set=valid_set, test_set=test_set)
+
+    print '... finetuning the model'
+    # early-stopping parameters
+    patience = 4 * n_train_batches  # look as this many examples regardless
+    patience_increase = 2.    # wait this much longer when a new best is
+                              # found
+    improvement_threshold = 0.995  # a relative improvement of this much is
+                                   # considered significant
+    validation_frequency = min(n_train_batches, patience / 2)
+                                  # go through this many
+                                  # minibatches before checking the network
+                                  # on the validation set; in this case we
+                                  # check every epoch
+
+    best_params = None
+    best_validation_loss = numpy.inf
+    test_score = 0.
+    start_time = time.clock()
+
+    done_looping = False
+    epoch = 0
+
+    print "number of training (fine-tuning) batches", n_train_batches
+    while (epoch < training_epochs) and (not done_looping):
+        epoch = epoch + 1
+        for minibatch_index in xrange(n_train_batches):
+
+            minibatch_avg_cost = train_fn(minibatch_index)
+            iter = epoch * n_train_batches + minibatch_index
+
+            if (iter + 1) % validation_frequency == 0:
+
+                validation_losses = validate_model()
+                this_validation_loss = numpy.mean(validation_losses)
+                print('epoch %i, minibatch %i/%i, validation error %f %%' % \
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       this_validation_loss * 100.))
+
+                # if we got the best validation score until now
+                if this_validation_loss < best_validation_loss:
+                    with open(output_file_name + '.pickle', 'w') as f:
+                        cPickle.dump(dbn, f)
+
+                    #improve patience if loss improvement is good enough
+                    if (this_validation_loss < best_validation_loss *
+                        improvement_threshold):
+                        patience = max(patience, iter * patience_increase)
+
+                    # save best validation score and iteration number
+                    best_validation_loss = this_validation_loss
+                    best_iter = iter
+
+                    # test it on the test set
+                    test_losses = test_model()
+                    test_score = numpy.mean(test_losses)
+                    print(('     epoch %i, minibatch %i/%i, test error of '
+                           'best model %f %%') %
+                          (epoch, minibatch_index + 1, n_train_batches,
+                           test_score * 100.))
+
+            if patience <= iter:
+                done_looping = True
+                break
 
     end_time = time.clock()
     print(('Optimization complete with best validation score of %f %%,'

@@ -32,9 +32,9 @@ center_frequencies = erbspace(100*Hz, 1000*Hz, N_GAMMATONES)
 TEST = True # test numpy serialization
  
 usage = """
-    python timit_to_numpy.py MLF_FILENAME.mlf [--nogamma]
-output files are MLF_FILENAME_xdata.npy, MLF_FILENAME_xgamma.npy, 
-and MLF_FILENAME_ylabels.npy
+    python timit_to_numpy.py MLF_FILENAME.mlf [--gamma]
+output files are MLF_FILENAME_xdata.npy, MLF_FILENAME_xfbank.npy,
+MLF_FILENAME_xgamma.npy, and MLF_FILENAME_ylabels.npy
     """
 
 
@@ -177,12 +177,12 @@ def extract_from_mlf(mlf, do_gammatones):
 
 if __name__ == '__main__':
     folder = '.'
-    do_gammatones = True
+    do_gammatones = False
     if len(sys.argv) < 2:
         print usage
         sys.exit(0)
-    if '--nogamma' in sys.argv:
-        do_gammatones = False
+    if '--gamma' in sys.argv:
+        do_gammatones = True
     mlf = sys.argv[1]
     print "Producing a (x, y) dataset file for:", mlf
     print "WARNING: only the first 39 MFCC coefficients will be taken into account"

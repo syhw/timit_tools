@@ -8,7 +8,8 @@ USE_CACHING = True # beware if you use RBM / GRBM or gammatones /
                    # speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
-prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
+#prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
+prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
 
 def padding(nframes, x, y):
     """ Dirty hacky padding for a minimum of nframes """
@@ -138,7 +139,7 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False,
 
 
 def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
-        pca_whiten=0, dataset_name='', speakers=False):
+        pca_whiten=0, dataset_name='', speakers=False, dev=False):
     """ prepare data from the dataset folder """
     # TODO remove !ENTER !EXIT sil when speakers==True
     xname = "xdata"
@@ -149,10 +150,14 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
         train_y = np.load(dataset + "/aligned_train_ylabels.npy")
         test_x = np.load(dataset + "/aligned_test_" + xname + ".npy")
         test_y = np.load(dataset + "/aligned_test_ylabels.npy")
+        if dev:
+            dev_x = np.load(dataset + "/aligned_dev_" + xname + ".npy")
+            dev_y = np.load(dataset + "/aligned_dev_ylabels.npy")
         if speakers:
             train_yspkr = np.load(dataset + "/aligned_train_yspeakers.npy")
             test_yspkr = np.load(dataset + "/aligned_test_yspeakers.npy")
-
+            if dev:
+                dev_yspkr = np.load(dataset + "/aligned_dev_yspeakers.npy")
     except:
         print >> sys.stderr, "you need the .npy python arrays"
         print >> sys.stderr, "you can produce them with src/timit_to_numpy.py"
@@ -161,78 +166,112 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
         print >> sys.stderr, dataset + "/aligned_train_ylabels.npy"
         print >> sys.stderr, dataset + "/aligned_test_" + xname + ".npy"
         print >> sys.stderr, dataset + "/aligned_test_ylabels.npy"
+        if dev:
+            print >> sys.stderr, dataset + "/aligned_dev_" + xname + ".npy"
+            print >> sys.stderr, dataset + "/aligned_dev_ylabels.npy"
         if speakers:
             print >> sys.stderr, dataset + "/aligned_train_yspeakers.npy"
             print >> sys.stderr, dataset + "/aligned_test_yspeakers.npy"
+            if dev:
+                print >> sys.stderr, dataset + "/aligned_dev_yspeakers.npy"
         sys.exit(-1)
+
+    def doscaling(arr, scal, stats, dname):
+        mystats = {}
+        if stats:
+            mystats = dict(stats)
+        if scaling == 'unit':
+            ### Putting values on [0-1]
+            mystats['min'] = np.min(arr, 0)
+            mystats['max'] = np.max(arr, 0)
+            if stats == None:
+                arr = (arr - mystats['min']) / mystats['max']
+            else:
+                arr = (arr - stats['min']) / stats['max']
+        elif scaling == 'normalize':
+            ### Normalizing (0 mean, 1 variance)
+            mystats['mean'] = np.mean(arr, 0)
+            mystats['std'] = np.std(arr, 0)
+            if stats == None:
+                arr = (arr - mystats['mean']) / mystats['std']
+            else:
+                arr = (arr - stats['mean']) / stats['std']
+        elif scaling == 'student':
+            ### T-statistic
+            mystats['mean'] = np.mean(arr, 0)
+            mystats['std'] = np.std(arr, 0, ddof=1)
+            if stats == None:
+                arr = (arr - mystats['mean']) / mystats['std']
+            else:
+                arr = (arr - stats['mean']) / stats['std']
+        if pca_whiten: 
+            ### PCA whitening, beware it's sklearn's and thus stays in PCA space
+            from sklearn.decomposition import PCA
+            pca = PCA(n_components=pca_whiten, whiten=True)
+            if pca_whiten < 0:
+                pca = PCA(n_components='mle', whiten=True)
+            if stats == None:
+                arr = pca.fit_transform(arr)
+                mystats['pca'] = pca
+            else:
+                arr = stats['pca'].transform(arr)
+            with open(dataset_name + '_pca_' + xname + '_' + dname + '.pickle', 'w') as f:
+                cPickle.dump(pca, f)
+        return arr, mystats
+
+    train_x, res_stats = doscaling(train_x, scaling, None, 'train')
+    test_x, _ = doscaling(test_x, scaling, res_stats, 'test')
+    dev_x, _ = doscaling(dev_x, scaling, res_stats, 'dev')
 
     print "train_x shape:", train_x.shape
     print "test_x shape:", test_x.shape
+    if dev:
+        print "dev_x shape:", dev_x.shape
 
-    if scaling == 'unit':
-        ### Putting values on [0-1]
-        train_x = (train_x - np.min(train_x, 0)) / np.max(train_x, 0)
-        test_x = (test_x - np.min(test_x, 0)) / np.max(test_x, 0)
-    elif scaling == 'normalize':
-        ### Normalizing (0 mean, 1 variance)
-        # TODO or do that globally on all data (but that would mean to know
-        # the test set and this is cheating!)
-        train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, 0)
-        test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0)
-    elif scaling == 'student':
-        ### T-statistic
-        train_x = (train_x - np.mean(train_x, 0)) / np.std(train_x, ddof=1)
-        test_x = (test_x - np.mean(test_x, 0)) / np.std(test_x, 0, ddof=1)
-    if pca_whiten: 
-        ### PCA whitening, beware it's sklearn's and thus stays in PCA space
-        from sklearn.decomposition import PCA
-        pca = PCA(n_components=pca_whiten, whiten=True)
-        if pca_whiten < 0:
-            pca = PCA(n_components='mle', whiten=True)
-        train_x = pca.fit_transform(train_x)
-        test_x = pca.transform(test_x)
-        with open(dataset_name + '_pca_' + xname + '.pickle', 'w') as f:
-            cPickle.dump(pca, f)
-    train_x_f = train_x
-    test_x_f = test_x
-
+    train_x_f = None
+    dev_x_f = None
+    test_x_f = None
+    dev_y_f = None
     ### Feature values (Xs)
     print "preparing / padding Xs"
     if nframes > 1:
-        if not speakers:
-            train_x_f = padding(nframes, train_x, train_y)
+        train_x_f = padding(nframes, train_x, train_y)
         test_x_f = padding(nframes, test_x, test_y)
+        if dev:
+            dev_x_f = padding(nframes, dev_x, dev_y)
 
     ### In the case of speakers discrimination:
     if speakers:
-        # switch the y for speakers now
-        ###train_y = train_yspkr
-        test_y = test_yspkr
-        # regroup: otherwise there will be ONLY never-seen-before speakers labels in the test set
-        ###train_x = np.append(train_x, test_x, axis=0)
-        ###train_x_f = np.append(train_x_f, test_x_f, axis=0)
-        ###train_y = np.append(train_y, test_y, axis=0)
-        # change dataset name
-        train_x = test_x ###
-        train_x_f = test_x_f ###
-        train_y = test_y ###
+        train_y = (train_y, train_yspkr)
+        test_y = (test_y, test_yspkr)
+        if dev:
+            dev_y = (dev_y, dev_yspkr)
         dataset_name += '_spkr'
 
     ### Labels (Ys)
     from collections import Counter
-    c = Counter(train_y)
-    if speakers:
-        ###c['unknown_spkr'] = 1
-        c = Counter(test_y)
-
-    to_int = dict([(k, c.keys().index(k)) for k in c.iterkeys()])
-    to_state = dict([(c.keys().index(k), k) for k in c.iterkeys()])
-    ###if speakers:
-    ###    c2 = Counter(test_y)
-    ###    to_int.update([(spkr, to_int['unknown_spkr']) for spkr in c2.keys() if spkr not in to_int])
+    c_phones = Counter(train_y[0]) 
+    to_int = dict([(k, c_phones.keys().index(k)) for k in c_phones.iterkeys()])
+    to_state = dict([(c_phones.keys().index(k), k) for k in c_phones.iterkeys()])
 
     with open(dataset_name + '_to_int_and_to_state_dicts_tuple.pickle', 'w') as f:
         cPickle.dump((to_int, to_state), f)
+    if speakers:
+    ###    to_int.update([(spkr, to_int['unknown_spkr']) for spkr in c2.keys() if spkr not in to_int])
+        c_spkr_train = Counter(train_y[1])
+        c_spkr_dev = Counter(dev_y[1])
+        c_spkr_test = Counter(test_y[1])
+        spkr_to_int = dict([(k, c_spkr_train.keys().index(k)) for k in c_spkr_train.iterkeys()])
+        to_spkr = dict([(c_spkr_train.keys().index(k), k) for k in c_spkr_train.iterkeys()])
+        curr_len = len(spkr_to_int)
+        spkr_to_int.update([(k, c_spkr_dev.keys().index(k) + curr_len) for k in c_spkr_dev.iterkeys()])
+        to_spkr.update([(c_spkr_dev.keys().index(k) + curr_len, k) for k in c_spkr_dev.iterkeys()])
+        curr_len = len(spkr_to_int)
+        spkr_to_int.update([(k, c_spkr_test.keys().index(k) + curr_len) for k in c_spkr_test.iterkeys()])
+        to_spkr.update([(c_spkr_test.keys().index(k) + curr_len, k) for k in c_spkr_test.iterkeys()])
+
+        with open(dataset_name + '_spkr_to_int_and_to_spkr_dicts_tuple.pickle', 'w') as f:
+            cPickle.dump((spkr_to_int, to_spkr), f)
 
     print "preparing / int mapping Ys"
     train_y_f = zeros(train_y.shape[0], dtype='int32')
@@ -243,12 +282,17 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
     for i, e in enumerate(test_y):
         test_y_f[i] = to_int[e]
 
+    if dev:
+        dev_y_f = zeros(dev_y.shape[0], dtype='int32')
+        for i, e in enumerate(test_y):
+            dev_y_f[i] = to_int[e]
+
     if TRAIN_CLASSIFIERS_1_FRAME:
         train_classifiers(train_x, train_y_f, test_x, test_y_f, dataset_name=dataset_name) # ONLY 1 FRAME
     if TRAIN_CLASSIFIERS:
         train_classifiers(train_x_f, train_y_f, test_x_f, test_y_f, dataset_name=dataset_name, nframes_mfcc=nframes)
 
-    return [train_x_f, train_y_f, test_x_f, test_y_f]
+    return [train_x_f, train_y_f, test_x_f, test_y_f, dev_x_f, dev_y_f]
 
 
 def load_data(dataset, nframes=13, features='MFCC', scaling='normalize', 
@@ -282,12 +326,11 @@ def load_data(dataset, nframes=13, features='MFCC', scaling='normalize',
     with open('prep_' + dataset_name + '_params.json', 'w') as f:
         f.write(json.dumps(params))
 
-
     def prep_and_serialize():
-        [train_x, train_y, test_x, test_y] = prep_data(dataset, 
+        [train_x, train_y, test_x, test_y, dev_x, dev_y] = prep_data(dataset, 
                 nframes=nframes, features=features, scaling=scaling,
                 pca_whiten=pca_whiten, dataset_name=dataset_name,
-                speakers=speakers)
+                speakers=speakers, dev=(cv_frac=='fixed'))
         with open(prefix_path + 'train_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
             np.save(f, train_x)
         with open(prefix_path + 'train_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
@@ -296,8 +339,14 @@ def load_data(dataset, nframes=13, features='MFCC', scaling='normalize',
             np.save(f, test_x)
         with open(prefix_path + 'test_y_' + dataset_name + '_' + features + str(nframes) + scaling +'.npy', 'w') as f:
             np.save(f, test_y)
+        if dev_x != None:
+            with open(prefix_path + 'dev_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy', 'w') as f:
+                np.save(f, dev_x)
+        if dev_y != None:
+            with open(prefix_path + 'dev_y_' + dataset_name + '_' + features + str(nframes) + scaling +'.npy', 'w') as f:
+                np.save(f, dev_y)
         print ">>> Serialized all train/test tables"
-        return [train_x, train_y, test_x, test_y]
+        return [train_x, train_y, test_x, test_y, dev_x, dev_y]
 
     if USE_CACHING:
         try: # try to load from serialized filed, beware
@@ -309,17 +358,25 @@ def load_data(dataset, nframes=13, features='MFCC', scaling='normalize',
                 test_x = np.load(f)
             with open(prefix_path + 'test_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
                 test_y = np.load(f)
+            if cv_frac == 'fixed':
+                with open(prefix_path + 'dev_x_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
+                    dev_x = np.load(f)
+                with open(prefix_path + 'dev_y_' + dataset_name + '_' + features + str(nframes) + scaling + '.npy') as f:
+                    dev_y = np.load(f)
         except: # do the whole preparation (normalization / padding)
-            [train_x, train_y, test_x, test_y] = prep_and_serialize()
+            [train_x, train_y, test_x, test_y, dev_x, dev_y] = prep_and_serialize()
     else:
-        [train_x, train_y, test_x, test_y] = prep_and_serialize()
+        [train_x, train_y, test_x, test_y, dev_x, dev_y] = prep_and_serialize()
 
-    from sklearn import cross_validation
     if cv_frac == 'fixed':
-        pass
-        # TODO with fixed dev test (/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/)
+        X_train = train_x
+        y_train = train_y
+        X_validate = dev_x
+        y_validate = dev_y
     else:
+        from sklearn import cross_validation
         X_train, X_validate, y_train, y_validate = cross_validation.train_test_split(train_x, train_y, test_size=cv_frac, random_state=0)
+
     if numpy_array_only:
         train_set_x = X_train
         train_set_y = np.asarray(y_train, dtype='int32')
