@@ -37,6 +37,10 @@ def wave_split(start, end, wavfname, compt):
     interval = sample[start_in_frames:end_in_frames]
     if interval.shape[0] == 0:
         # do not do this start/end split
+        print >> sys.stderr, sample
+        print >> sys.stderr, sample.shape
+        print >> sys.stderr, start_in_frames
+        print >> sys.stderr, end_in_frames
         return -1
     max_volume = np.max(interval)
     ###wavefile.readframes(start_in_frames) # skipping to start
@@ -72,14 +76,14 @@ def wave_split(start, end, wavfname, compt):
     return 0
 
 
-def write_lab(buffer, labfname, compt):
-    assert len(buffer) >= MIN_PHONES + 2 # at least MIN_PHONES phone in between
-    offs = buffer[1][0] - N_ENTER_EXIT_FRAMES * MFCC_FRAMERATE # offset
+def write_lab(p_buffer, labfname, compt):
+    assert len(p_buffer) >= MIN_PHONES + 2 # at least MIN_PHONES phone in between
+    offs = p_buffer[1][0] - N_ENTER_EXIT_FRAMES * MFCC_FRAMERATE # offset
     with open(labfname[:-4] + '_' + str(compt) + '.lab', 'w') as lab_w:
         if N_ENTER_EXIT_FRAMES:
             lab_w.write('0 ' + str(N_ENTER_EXIT_FRAMES * MFCC_FRAMERATE) + ' !ENTER\n')
         end = 0
-        for s, e, p in buffer[1:-1]:
+        for s, e, p in p_buffer[1:-1]:
             end = e
             lab_w.write(str(s - offs) + ' ' + str(e - offs) + ' ' + p + '\n')
         if N_ENTER_EXIT_FRAMES:
@@ -105,23 +109,24 @@ def split_in(folder, split_phones):
         phones_fname = lab_fname[:-4] + '.phones'
         compt = 0
         with open(lab_fname) as lab_r:
-            buffer = []
+            p_buffer = []
             for line in lab_r:
                 s, e, p = line.strip(' \n').split()
                 s, e = int(s), int(e)
-                buffer.append((s, e, p))
-                if p in split_phones or 'SIL' in p and (e-s) > 0.5*ONE_S:
-                    if len(buffer) >= MIN_PHONES + 2:
-                        start = buffer[1][0]
-                        end = buffer[-2][1]
+                p_buffer.append((s, e, p))
+                if (p.strip() in split_phones or 'SIL' in p.strip() 
+                        and (e-s) > 0.5*ONE_S):
+                    if len(p_buffer) >= MIN_PHONES + 2:
+                        start = p_buffer[1][0]  # b/c p_buffer[0] is the header
+                        end = p_buffer[-2][1]
                         assert(end > start)
                         if wave_split(start, end, wav_fname, compt) != 0:
-                            print "ERROR with:", start, end, wav_fname, compt
+                            print >> sys.stderr, "ERROR with:", start, end, wav_fname, compt
                             break
                         else:
-                            write_lab(buffer, lab_fname, compt)
+                            write_lab(p_buffer, lab_fname, compt)
                             compt += 1
-                    buffer = [(int(s), int(e), p)]
+                    p_buffer = [(int(s), int(e), p)]
         print "did", lab_fname
         # some cleaning now:
         os.remove(lab_fname)

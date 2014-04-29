@@ -60,17 +60,22 @@ prepare_CSJ:
 prepare_buckeye:
 	@echo -e "\n>>> remove train and test folders if any\n"
 	rm -rf $(dataset)/train
+	rm -rf $(dataset)/dev
 	rm -rf $(dataset)/test
 	@echo -e "\n>>> convert the Buckeye annotations (.phones) to .lab (HTK format) \n"
 	python src/buckeye_to_htk_labels.py $(dataset)
 	@echo -e "\n>>> split the dataset into a training and testing set\n"
 	mkdir -p $(dataset)/train
+	mkdir -p $(dataset)/dev
 	mkdir -p $(dataset)/test
 	###python src/train_test_folders.py $(dataset) $(dataset)/../dataset_train_test --wav # <- this is a random split that samples accross all speakers
 	cp -r $(dataset)/full/s0* $(dataset)/train/
 	cp -r $(dataset)/full/s1* $(dataset)/train/
 	cp -r $(dataset)/full/s2* $(dataset)/train/
-	cp -r $(dataset)/full/s3* $(dataset)/train/
+	#cp -r $(dataset)/full/s3* $(dataset)/train/
+	cp -r $(dataset)/full/s3[0-5] $(dataset)/train/
+	cp -r $(dataset)/full/s3[6-8] $(dataset)/dev/
+	cp -r $(dataset)/full/s39 $(dataset)/test/
 	cp -r $(dataset)/full/s40 $(dataset)/test/
 	#find $(dataset)/train/ -name ._* | xargs rm
 	#find $(dataset)/test/ -name ._* | xargs rm
@@ -79,18 +84,26 @@ prepare_buckeye:
 	@echo -e "\n>>> split the WAV and LAB files on IVER (other interlocutor)\n"
 	#python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE 
 	#python src/split_lab_wav.py $(dataset)/test IVER VOCNOISE
-	python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN 
+	python src/substitute_phones.py $(dataset)/train buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/dev buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/test buckeye_foldings.json
+	python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN
+	python src/split_lab_wav.py $(dataset)/dev IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN
 	python src/split_lab_wav.py $(dataset)/test IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN
 	@echo -e "\n>>> put !ENTER and !EXIT symbols and substitute phones\n"
 	#python src/substitute_phones.py $(dataset)/train --sentences buckeye_foldings.json
 	#python src/substitute_phones.py $(dataset)/test --sentences buckeye_foldings.json
 	python src/substitute_phones.py $(dataset)/train buckeye_foldings.json
-	python src/substitute_phones.py $(dataset)/test buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/dev buckeye_foldings.json
+	python src/substitute_phones.py $(dataset)/dev buckeye_foldings.json
+	#python src/substitute_phones.py $(dataset)/test buckeye_foldings.json
 	@echo -e "\n>>> produce MFCC from WAV files\n"
-	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/train
-	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext $(dataset)/test
-	@echo -e "\n>>> creates (train|test).mlf, (train|test).scp listings and labels (dicts)\n"
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext --filterbanks $(dataset)/train
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext --filterbanks $(dataset)/dev
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext --filterbanks $(dataset)/test
+	@echo -e "\n>>> creates (train|dev|test).mlf, (train|dev|test).scp listings and labels (dicts)\n"
 	python src/create_phonesMLF_list_labels.py $(dataset)/train
+	python src/create_phonesMLF_list_labels.py $(dataset)/dev
 	python src/create_phonesMLF_list_labels.py $(dataset)/test
 
 
