@@ -8,8 +8,8 @@ USE_CACHING = True # beware if you use RBM / GRBM or gammatones /
                    # speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
-#prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
-prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
+prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
+#prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
 
 def padding(nframes, x, y):
     """ Dirty hacky padding for a minimum of nframes """
@@ -42,7 +42,7 @@ def padding(nframes, x, y):
                     'constant', constant_values=(0, 0))
     return x_f
 
-def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False,
+def train_classifiers(train_x, train_y, test_x, test_y, articulatory=False,
         dataset_name='', classifiers=['lda'], nframes_mfcc=1):
     """ train classifiers on the features to look at baseline classifications
     """
@@ -56,8 +56,8 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False,
         from sklearn.cross_validation import cross_val_score
         clf = linear_model.SGDClassifier(loss='modified_huber',
                 penalty='elasticnet') # TODO change and CV params
-        clf.fit(train_x, train_y_f)
-        scores = cross_val_score(clf, test_x, test_y_f)
+        clf.fit(train_x, train_y)
+        scores = cross_val_score(clf, test_x, test_y)
         print "score linear classifier (elasticnet, SGD trained)", scores.mean()
         with open('linear_elasticnet_classif.pickle', 'w') as w_f:
             cPickle.dump(clf, w_f)
@@ -68,8 +68,8 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False,
         from sklearn.ensemble import RandomForestClassifier
         clf2 = RandomForestClassifier(n_jobs=-1, max_features='log2',
                 min_samples_split=3) # TODO change and CV params
-        clf2.fit(train_x, train_y_f)
-        scores2 = cross_val_score(clf2, test_x, test_y_f)
+        clf2.fit(train_x, train_y)
+        scores2 = cross_val_score(clf2, test_x, test_y)
         print "score random forest", scores2.mean()
         ###with open('random_forest_classif.pickle', 'w') as f: TODO TODO TODO
         ###    cPickle.dump(clf2, f)  TODO TODO TODO
@@ -106,12 +106,12 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False,
                 print >> w_f, cm_valid
 
         if articulatory:
-            lda_on(train_x[:, :39*nframes_mfcc], train_y_f,
-                    test_x[:, :39*nframes_mfcc], test_y_f, feats_name='mfcc')
-            lda_on(train_x[:, 39*nframes_mfcc:], train_y_f,
-                    test_x[:, 39*nframes_mfcc:], test_y_f, feats_name='arti')
+            lda_on(train_x[:, :39*nframes_mfcc], train_y,
+                    test_x[:, :39*nframes_mfcc], test_y, feats_name='mfcc')
+            lda_on(train_x[:, 39*nframes_mfcc:], train_y,
+                    test_x[:, 39*nframes_mfcc:], test_y, feats_name='arti')
         else:
-            lda_on(train_x, train_y_f, test_x, test_y_f, feats_name='both')
+            lda_on(train_x, train_y, test_x, test_y, feats_name='both')
 
     if 'featselec' in classifiers:
         ### Feature selection
@@ -121,7 +121,7 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False,
         from sklearn.feature_selection import SelectPercentile, f_classif
         # SelectKBest TODO?
         selector = SelectPercentile(f_classif, percentile=10) # ANOVA
-        selector.fit(train_x, train_y_f)
+        selector.fit(train_x, train_y)
         print selector.pvalues_
         scores = -np.log10(selector.pvalues_)
         scores /= scores.max()
@@ -131,7 +131,7 @@ def train_classifiers(train_x, train_y_f, test_x, test_y_f, articulatory=False,
         print(" - Recursive feature elimination with cross-validation w/ LDA")
         lda = LDA()
         rfecv = RFECV(estimator=lda, step=1, scoring='accuracy')
-        rfecv.fit(train_x, train_y_f)
+        rfecv.fit(train_x, train_y)
         print("Optimal number of features : %d" % rfecv.n_features_)
         print("Ranking (order of the MFCC):")
         print rfecv.ranking_
@@ -240,17 +240,9 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
         if dev:
             dev_x_f = padding(nframes, dev_x, dev_y)
 
-    ### In the case of speakers discrimination:
-    if speakers:
-        train_y = (train_y, train_yspkr)
-        test_y = (test_y, test_yspkr)
-        if dev:
-            dev_y = (dev_y, dev_yspkr)
-        dataset_name += '_spkr'
-
     ### Labels (Ys)
     from collections import Counter
-    c_phones = Counter(train_y[0]) 
+    c_phones = Counter(train_y) 
     to_int = dict([(k, c_phones.keys().index(k)) for k in c_phones.iterkeys()])
     to_state = dict([(c_phones.keys().index(k), k) for k in c_phones.iterkeys()])
 
@@ -258,9 +250,9 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
         cPickle.dump((to_int, to_state), f)
     if speakers:
     ###    to_int.update([(spkr, to_int['unknown_spkr']) for spkr in c2.keys() if spkr not in to_int])
-        c_spkr_train = Counter(train_y[1])
-        c_spkr_dev = Counter(dev_y[1])
-        c_spkr_test = Counter(test_y[1])
+        c_spkr_train = Counter(train_yspkr)
+        c_spkr_dev = Counter(dev_yspkr)
+        c_spkr_test = Counter(test_yspkr)
         spkr_to_int = dict([(k, c_spkr_train.keys().index(k)) for k in c_spkr_train.iterkeys()])
         to_spkr = dict([(c_spkr_train.keys().index(k), k) for k in c_spkr_train.iterkeys()])
         curr_len = len(spkr_to_int)
@@ -287,10 +279,33 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
         for i, e in enumerate(test_y):
             dev_y_f[i] = to_int[e]
 
-    if TRAIN_CLASSIFIERS_1_FRAME:
-        train_classifiers(train_x, train_y_f, test_x, test_y_f, dataset_name=dataset_name) # ONLY 1 FRAME
-    if TRAIN_CLASSIFIERS:
-        train_classifiers(train_x_f, train_y_f, test_x_f, test_y_f, dataset_name=dataset_name, nframes_mfcc=nframes)
+    if speakers:
+        train_yspkr_f = zeros(train_yspkr.shape[0], dtype='int32')
+        for i, e in enumerate(train_yspkr):
+            train_yspkr_f[i] = spkr_to_int[e]
+        test_yspkr_f = zeros(test_yspkr.shape[0], dtype='int32')
+        for i, e in enumerate(test_yspkr):
+            test_yspkr_f[i] = spkr_to_int[e]
+        train_y_f = (train_y_f, train_yspkr_f)
+        test_y_f = (test_y_f, test_yspkr_f)
+        if dev:
+            dev_yspkr_f = zeros(dev_yspkr.shape[0], dtype='int32')
+            for i, e in enumerate(dev_yspkr):
+                dev_yspkr_f[i] = spkr_to_int[e]
+            dev_y_f = (dev_y_f, dev_yspkr_f)
+
+    if speakers:
+        if TRAIN_CLASSIFIERS_1_FRAME:
+            train_classifiers(train_x, train_y_f[0], test_x, test_y_f[0], dataset_name=dataset_name) # ONLY 1 FRAME 
+            train_classifiers(train_x, train_y_f[1], test_x, test_y_f[1], dataset_name=dataset_name) # ONLY 1 FRAME
+        if TRAIN_CLASSIFIERS:
+            train_classifiers(train_x_f, train_y_f[0], test_x_f, test_y_f[0], dataset_name=dataset_name, nframes_mfcc=nframes)
+            train_classifiers(train_x_f, train_y_f[1], test_x_f, test_y_f[1], dataset_name=dataset_name, nframes_mfcc=nframes)
+    else:
+        if TRAIN_CLASSIFIERS_1_FRAME:
+            train_classifiers(train_x, train_y_f, test_x, test_y_f, dataset_name=dataset_name) # ONLY 1 FRAME
+        if TRAIN_CLASSIFIERS:
+            train_classifiers(train_x_f, train_y_f, test_x_f, test_y_f, dataset_name=dataset_name, nframes_mfcc=nframes)
 
     return [train_x_f, train_y_f, test_x_f, test_y_f, dev_x_f, dev_y_f]
 

@@ -20,7 +20,8 @@ from prep_timit import load_data
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
 #DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/wo_sa'
-DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
+DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
+#DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
 N_FEATURES = 40  # filterbanks
 N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
@@ -32,15 +33,15 @@ output_file_name = 'dbn_ReLu_2496_units_13_frames'
 
 class DatasetIterator(object):
     def __init__(self, x, y, batch_size):
-        self._x = x
-        self._y = y
-        #self._x = theano.shared(x, borrow=BORROW)
-        #self._y = theano.shared(y, borrow=BORROW)
+        #self._x = x
+        #self._y = y
+        self._x = theano.shared(x, borrow=BORROW)
+        self._y = theano.shared(y, borrow=BORROW)
         self._batch_size = batch_size
-        self._n_batches = self._x.shape[0] / self._batch_size
-        self._rest = self._x.shape[0] % self._batch_size # TODO
-        #self._n_batches = x.shape[0] / self._batch_size
-        #self._rest = x.shape[0] % self._batch_size # TODO
+        #self._n_batches = self._x.shape[0] / self._batch_size
+        #self._rest = self._x.shape[0] % self._batch_size # TODO
+        self._n_batches = self._x.get_value(borrow=BORROW).shape[0] / self._batch_size
+        self._rest = self._x.get_value(borrow=BORROW).shape[0] % self._batch_size # TODO
 
     def __iter__(self):
         for index in xrange(self._n_batches):
@@ -261,11 +262,13 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
 
     print "loading dataset from", dataset
     #datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='normalize', cv_frac=0.2, speakers=False, numpy_array_only=True) 
-    datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='student', cv_frac='fixed', speakers=True, numpy_array_only=True) 
+    datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='student', cv_frac='fixed', speakers=False, numpy_array_only=True) 
 
     train_set_x, train_set_y = datasets[0]  # if speakers, do test/test/test
-    valid_set_x, valid_set_y = datasets[1] 
-    test_set_x, test_set_y = datasets[2]
+    valid_set = datasets[1] 
+    valid_set_x, valid_set_y = valid_set
+    test_set = datasets[2]
+    test_set_x, test_set_y = test_set
     print "dataset loaded!"
     print "train set size", train_set_x.shape[0]
     print "validation set size", valid_set_x.shape[0]

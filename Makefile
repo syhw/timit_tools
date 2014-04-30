@@ -97,8 +97,9 @@ prepare_buckeye:
 prepare_WSJ0:
 	@echo -e "*** preparing the dataset for phones recognition ***"
 	@echo -e "\n>>> produce MFCC and filterbanks from WAV files\n"
-	sph2pipe -f raw <in> -f wav <out>
-
+	#python src/convert_WSJ0.py $(dataset)
+	python src/mfcc_and_gammatones.py --htk-mfcc --forcemfcext --filterbanks $(dataset)
+	# TODO
 
 
 train: train_monophones
