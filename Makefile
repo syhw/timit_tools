@@ -87,9 +87,9 @@ prepare_buckeye:
 	python src/substitute_phones.py $(dataset)/train buckeye_foldings.json
 	python src/substitute_phones.py $(dataset)/dev buckeye_foldings.json
 	python src/substitute_phones.py $(dataset)/test buckeye_foldings.json
-	python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN
-	python src/split_lab_wav.py $(dataset)/dev IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN
-	python src/split_lab_wav.py $(dataset)/test IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE SIL UNKNOWN
+	python src/split_lab_wav.py $(dataset)/train IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE UNKNOWN
+	python src/split_lab_wav.py $(dataset)/dev IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE UNKNOWN
+	python src/split_lab_wav.py $(dataset)/test IVER VOCNOISE BIP IVERLAUGH LAUGH NOISE UNKNOWN
 	@echo -e "\n>>> put !ENTER and !EXIT symbols and substitute phones\n"
 	#python src/substitute_phones.py $(dataset)/train --sentences buckeye_foldings.json
 	#python src/substitute_phones.py $(dataset)/test --sentences buckeye_foldings.json
