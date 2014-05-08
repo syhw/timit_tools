@@ -21,8 +21,8 @@ from prep_timit import load_data
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
 #DATASET = '/media/bigdata/TIMIT'
 #DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/wo_sa'
-#DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
-DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
+DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
+#DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
 N_FEATURES = 40  # filterbanks
 N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
@@ -43,8 +43,10 @@ class DatasetSentencesIterator(object):
         index = 0
         next_sent = 1
         while index < self._x.shape[0]:
-            while next_sent - index < MIN_FRAMES_PER_SENTENCE:
+            while next_sent - index < MIN_FRAMES_PER_SENTENCE and self._starts[next_sent:].sum():
                 next_sent = numpy.argmax(self._starts[next_sent:]) + next_sent + 1
+            if not self._starts[next_sent:].sum():
+                next_sent = self._x.shape[0]
             #yield shared(self._x[index:next_sent], borrow=BORROW), shared(self._y[index:next_sent], borrow=BORROW)
             yield self._x[index:next_sent], self._y[index:next_sent]
             index = next_sent
@@ -371,9 +373,9 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
                 train_set_y, to_int)
         for iteration, (x, y) in enumerate(train_set_iterator):
             avg_cost = train_fn(x, y, finetune_lr)
-            #print('  epoch %i, sentence %i, '
-            #'avg cost for this sentence %f' % \
-            #      (epoch, iteration, avg_cost))
+            print('  epoch %i, sentence %i, '
+            'avg cost for this sentence %f' % \
+                  (epoch, iteration, avg_cost))
 
         # we check the validation loss on every epoch
         validation_losses = validate_model()

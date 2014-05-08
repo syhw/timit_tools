@@ -8,8 +8,8 @@ USE_CACHING = True # beware if you use RBM / GRBM or gammatones /
                    # speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
-#prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
-prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
+prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
+#prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
 
 def padding(nframes, x, y):
     """ Dirty hacky padding for a minimum of nframes """
