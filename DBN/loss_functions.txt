@@ -1,0 +1,13 @@
+
+Loss functions for the phone:
+    - classification error (phone or phone state ID)
+    - AB distance
+    - ABX / same-different
+
+Loss functions for the speaker:
+    - classification error (speaker ID)
+    - same-different
+
+Training with the temporality/sequentiality:
+    - loss function for the phone lvl of the next frame from last layer
+    - backpropagate into previous (sequentially) layer (same level)

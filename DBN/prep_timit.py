@@ -8,8 +8,8 @@ USE_CACHING = True # beware if you use RBM / GRBM or gammatones /
                    # speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
-prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
-#prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
+#prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
+prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
 
 def padding(nframes, x, y):
     """ Dirty hacky padding for a minimum of nframes """
@@ -53,12 +53,10 @@ def train_classifiers(train_x, train_y, test_x, test_y, articulatory=False,
         ### Training a linear model (elasticnet) to compare results
         print("*** training a linear model with SGD ***")
         from sklearn import linear_model
-        from sklearn.cross_validation import cross_val_score
         clf = linear_model.SGDClassifier(loss='modified_huber',
                 penalty='elasticnet') # TODO change and CV params
         clf.fit(train_x, train_y)
-        scores = cross_val_score(clf, test_x, test_y)
-        print "score linear classifier (elasticnet, SGD trained)", scores.mean()
+        print "score linear classifier (elasticnet, SGD trained)", clf.score(test_x, test_y)
         with open('linear_elasticnet_classif.pickle', 'w') as w_f:
             cPickle.dump(clf, w_f)
 
@@ -67,12 +65,9 @@ def train_classifiers(train_x, train_y, test_x, test_y, articulatory=False,
         print("*** training a random forest ***")
         from sklearn.ensemble import RandomForestClassifier
         clf2 = RandomForestClassifier(n_jobs=-1, max_features='log2',
-                min_samples_split=3) # TODO change and CV params
+                min_samples_split=3)
         clf2.fit(train_x, train_y)
-        scores2 = cross_val_score(clf2, test_x, test_y)
-        print "score random forest", scores2.mean()
-        ###with open('random_forest_classif.pickle', 'w') as f: TODO TODO TODO
-        ###    cPickle.dump(clf2, f)  TODO TODO TODO
+        print "score random forest", clf2.score(test_x, test_y)
 
     if 'lda' in classifiers:
         print "*** training a linear discriminant classifier ***"
@@ -224,14 +219,13 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
     dev_x, _ = doscaling(dev_x, scaling, res_stats, 'dev')
 
     print "train_x shape:", train_x.shape
-    print "test_x shape:", test_x.shape
     if dev:
         print "dev_x shape:", dev_x.shape
+    print "test_x shape:", test_x.shape
 
     train_x_f = None
     dev_x_f = None
     test_x_f = None
-    dev_y_f = None
     ### Feature values (Xs)
     print "preparing / padding Xs"
     if nframes > 1:
@@ -239,6 +233,10 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
         test_x_f = padding(nframes, test_x, test_y)
         if dev:
             dev_x_f = padding(nframes, dev_x, dev_y)
+    else:
+        train_x_f = np.array(train_x, dtype='float32')
+        dev_x_f = np.array(dev_x, dtype='float32')
+        test_x_f = np.array(test_x, dtype='float32')
 
     ### Labels (Ys)
     from collections import Counter
@@ -274,6 +272,7 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
     for i, e in enumerate(test_y):
         test_y_f[i] = to_int[e]
 
+    dev_y_f = None
     if dev:
         dev_y_f = zeros(dev_y.shape[0], dtype='int32')
         for i, e in enumerate(test_y):
@@ -311,7 +310,7 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
 
 
 def load_data(dataset, nframes=13, features='MFCC', scaling='normalize', 
-        pca_whiten=0, cv_frac=0.2, dataset_name='timit_wo_sa', speakers=False,
+        pca_whiten=0, cv_frac=0.2, dataset_name='timit', speakers=False,
         numpy_array_only=False):
     """ 
     params:

@@ -1,0 +1,69 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc} % serif: fontenc, palatino, fouriernc, lmodern
+\usepackage{fullpage}
+\usepackage{amsfonts, amsmath, amssymb, amstext, latexsym, stmaryrd, ulem}
+\usepackage{graphicx, epsfig, wrapfig, exscale, amsbsy, amsopn, fancyhdr}
+\usepackage{subfigure, xspace, enumerate, caption, mathrsfs, pdfpages}
+\usepackage{url, tikz}
+\usetikzlibrary{positioning, arrows}
+
+
+\begin{document}
+
+\begin{center}
+{\fontsize{20pt}{20pt} \selectfont \textbf{Deep learning models for speech}}
+\vskip 10pt
+Gabriel Synnaeve
+\vskip 10pt
+\hrule height 4pt
+\end{center}
+
+This presents some of the models found here.
+
+\section{Basic HMM-DBN}
+
+%%% TODO
+
+\section{Sequential Stacked DBN}
+
+%%% TODO
+% Stacked Sequential Learning.
+% Parameters: a history size Wh , a future size Wf , and a cross-validation parameter K.
+% Learning algorithm: Given a sample S = {(xt , yt )}, and a sequential learning algorithm A:
+% 1. Construct a sample of predictions yˆt for each xt ∈ S as follows:
+% (a) Split S into K equal-sized disjoint subsets S1,...,SK
+% (b) Forj=1,...,K,letfj =A(S−Sj)
+% (c) LetSˆ={(xt,yˆt):yˆt =fj(xt)andxt ∈Sj}
+% 2. Construct an extended dataset S′ of instances (x′t, yt) by converting each xt to x′t as follows: xt′ = ⟨x′1,...,x′lt⟩ where x′i = (xi,yˆi−Wh,...,yˆi+Wf ) and yˆi is the i-th component of yˆt, the label vector paired with xt in Sˆ.
+% 3. Return two functions: f = A(S) and f′ = A(S′).
+% Inference algorithm: given an instance vector x:
+% 1. Letyˆ=f(x)
+% 2. Carry out Step 2 above to produce an extended in- stance x′ (using yˆ in place of yˆt).
+% 3. Return f′(x′).
+
+\section{RNN}
+
+Activation $a_i(t)$ for layer $i$ at time $t$ is:
+\begin{equation}
+    a_i(t) = \tanh (W_i a_i(t-1) + Z_i a_{i-1}(t) + b_{i-1}(t))
+\end{equation}
+With $a_0 + b_0$ being the signal (input features).
+
+\section{RNN speech + speaker}
+
+Alternate between backpropagation with:
+
+\begin{eqnarray}
+    loss(speaker, y_{spkr}) \\
+    loss(phone, y_{phn})  
+\end{eqnarray}
+
+
+\section{Embeddings-based loss functions}
+
+%%% TODO
+
+
+\end{document}
