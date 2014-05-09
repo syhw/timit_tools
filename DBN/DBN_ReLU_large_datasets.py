@@ -1,11 +1,10 @@
 import cPickle
-import gzip
 import os
 import sys
 import time
 
 import numpy
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 
 import theano
 import theano.tensor as T
@@ -34,10 +33,12 @@ output_file_name = 'dbn_ReLu_2496_units_13_frames'
 
 
 class DatasetSentencesIterator(object):
-    def __init__(self, x, y, phn_to_st):
+    def __init__(self, x, y, phn_to_st, nframes=1):
         self._x = x
         self._y = y
         self._start_end = [[0]]
+        self._nframes = nframes
+        self._memoized_x = defaultdict(lambda: {})
         i = 0
         for i, s in enumerate(y == phn_to_st['!ENTER[2]']):
             if s and i - self._start_end[-1][0] > MIN_FRAMES_PER_SENTENCE:
@@ -45,10 +46,29 @@ class DatasetSentencesIterator(object):
                 self._start_end.append([i])
         self._start_end[-1].append(i+1)
 
+    def _stackpad(self, start, end):
+        """ Method because of the memoization. """
+        if start in self._memoized_x and end in self._memoized_x[start]:
+            return self._memoized_x[start][end]
+        x = self._x[start:end]
+        nf = self._nframes
+        ret = numpy.zeros((x.shape[0], x.shape[1] * nf), dtype='float32')
+        ba = (nf - 1) / 2  # before/after
+        for i in xrange(x.shape[0]):
+            ret[i] = numpy.pad(x[max(0, i - ba):i + ba +1].flatten(),
+                    (max(0, (ba -i) * x.shape[1]),
+                        max(0, ((i + ba + 1) - x.shape[0]) * x.shape[1])),
+                    'constant', constant_values=(0, 0))
+        self._memoized_x[start][end] = ret
+        return ret
+
     def __iter__(self):
         for start, end in self._start_end:
             #yield shared(self._x[start:end], borrow=BORROW), shared(self._y[start:end], borrow=BORROW)
-            yield self._x[start:end], self._y[start:end]
+            if self._nframes > 1:
+                yield self._stackpad(start, end), self._y[start:end]
+            else:
+                yield self._x[start:end], self._y[start:end]
 
 
 class DatasetIterator(object):
@@ -221,7 +241,9 @@ class DBN(object):
 
         return pretrain_fns
 
-    def build_finetune_functions(self, valid_set, test_set):
+    def get_SGD_trainer(self):
+        """ Returns a plain SGD minibatch trainer with learning rate as param.
+        """
         batch_x = T.matrix('batch_x')
         batch_y = T.ivector('batch_y')
         ###learning_rate = T.matrix('lr')  # learning rate to use
@@ -242,6 +264,13 @@ class DBN(object):
             updates=updates,
             givens={self.x: batch_x, self.y: batch_y})
 
+        return train_fn
+
+
+    def valid_and_test_scores(self, valid_set, test_set):
+        """ Returns functions to get current validation and test scores. """
+        batch_x = T.matrix('batch_x')
+        batch_y = T.ivector('batch_y')
         score = theano.function(inputs=[theano.Param(batch_x), theano.Param(batch_y)],
                 outputs=self.errors,
                 givens={self.x: batch_x, self.y: batch_y})
@@ -254,7 +283,7 @@ class DBN(object):
         def test_score():
             return [score(batch_x, batch_y) for batch_x, batch_y in test_set]
 
-        return train_fn, valid_score, test_score
+        return valid_score, test_score
 
 
 def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
@@ -349,7 +378,8 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
 
     # get the training, validation and testing function for the model
     print '... getting the finetuning functions'
-    train_fn, validate_model, test_model = dbn.build_finetune_functions(
+    train_fn = dbn.get_SGD_trainer()
+    validate_model, test_model = dbn.valid_and_test_scores(
             valid_set=valid_set_iterator, test_set=test_set_iterator)
 
     print '... finetuning the model'
@@ -371,11 +401,15 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
         epoch = epoch + 1
         train_set_iterator = DatasetSentencesIterator(train_set_x, 
                 train_set_y, to_int)
+        avg_costs = []
         for iteration, (x, y) in enumerate(train_set_iterator):
             avg_cost = train_fn(x, y, finetune_lr)
+            avg_costs.append(avg_cost)
             #print('  epoch %i, sentence %i, '
             #'avg cost for this sentence %f' % \
             #      (epoch, iteration, avg_cost))
+        print('  epoch %i, avg costs %f' % \
+              (epoch, numpy.mean(avg_costs)))
 
         # we check the validation loss on every epoch
         validation_losses = validate_model()
