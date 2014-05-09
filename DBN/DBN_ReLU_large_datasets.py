@@ -37,20 +37,18 @@ class DatasetSentencesIterator(object):
     def __init__(self, x, y, phn_to_st):
         self._x = x
         self._y = y
-        self._starts = (y == phn_to_st['!ENTER[2]'])
+        self._start_end = [[0]]
+        i = 0
+        for i, s in enumerate(y == phn_to_st['!ENTER[2]']):
+            if s and i - self._start_end[-1][0] > MIN_FRAMES_PER_SENTENCE:
+                self._start_end[-1].append(i)
+                self._start_end.append([i])
+        self._start_end[-1].append(i+1)
 
     def __iter__(self):
-        index = 0
-        next_sent = 1
-        while index < self._x.shape[0]:
-            while next_sent - index < MIN_FRAMES_PER_SENTENCE and self._starts[next_sent:].sum():
-                next_sent = numpy.argmax(self._starts[next_sent:]) + next_sent + 1
-            if not self._starts[next_sent:].sum():
-                next_sent = self._x.shape[0]
-            #yield shared(self._x[index:next_sent], borrow=BORROW), shared(self._y[index:next_sent], borrow=BORROW)
-            yield self._x[index:next_sent], self._y[index:next_sent]
-            index = next_sent
-            next_sent = index + 1
+        for start, end in self._start_end:
+            #yield shared(self._x[start:end], borrow=BORROW), shared(self._y[start:end], borrow=BORROW)
+            yield self._x[start:end], self._y[start:end]
 
 
 class DatasetIterator(object):
@@ -286,10 +284,8 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     datasets = load_data(dataset, nframes=1, features='fbank', scaling='student', cv_frac='fixed', speakers=False, numpy_array_only=True) 
 
     train_set_x, train_set_y = datasets[0]  # if speakers, do test/test/test
-    valid_set = datasets[1] 
-    valid_set_x, valid_set_y = valid_set
-    test_set = datasets[2]
-    test_set_x, test_set_y = test_set
+    valid_set_x, valid_set_y = datasets[1]
+    test_set_x, test_set_y = datasets[2]
 
     print "dataset loaded!"
     print "train set size", train_set_x.shape[0]
@@ -300,6 +296,10 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     with open('timit_to_int_and_to_state_dicts_tuple.pickle') as f:  # TODO
         to_int, _ = cPickle.load(f)
     train_set_iterator = DatasetSentencesIterator(train_set_x, train_set_y,
+            to_int)
+    valid_set_iterator = DatasetSentencesIterator(valid_set_x, valid_set_y,
+            to_int)
+    test_set_iterator = DatasetSentencesIterator(test_set_x, test_set_y,
             to_int)
 
     # numpy random generator
@@ -350,7 +350,7 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     # get the training, validation and testing function for the model
     print '... getting the finetuning functions'
     train_fn, validate_model, test_model = dbn.build_finetune_functions(
-            valid_set=valid_set, test_set=test_set)
+            valid_set=valid_set_iterator, test_set=test_set_iterator)
 
     print '... finetuning the model'
     # early-stopping parameters
@@ -373,9 +373,9 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
                 train_set_y, to_int)
         for iteration, (x, y) in enumerate(train_set_iterator):
             avg_cost = train_fn(x, y, finetune_lr)
-            print('  epoch %i, sentence %i, '
-            'avg cost for this sentence %f' % \
-                  (epoch, iteration, avg_cost))
+            #print('  epoch %i, sentence %i, '
+            #'avg cost for this sentence %f' % \
+            #      (epoch, iteration, avg_cost))
 
         # we check the validation loss on every epoch
         validation_losses = validate_model()
