@@ -33,6 +33,8 @@ output_file_name = 'dbn_ReLu_2496_units_13_frames'
 
 
 class DatasetSentencesIterator(object):
+    """ An iterator of setences of the dataset. """
+
     def __init__(self, x, y, phn_to_st, nframes=1):
         self._x = x
         self._y = y
@@ -66,12 +68,15 @@ class DatasetSentencesIterator(object):
         for start, end in self._start_end:
             #yield shared(self._x[start:end], borrow=BORROW), shared(self._y[start:end], borrow=BORROW)
             if self._nframes > 1:
+                #yield shared(self._stackpad(start, end)), shared(self._y[start:end])
                 yield self._stackpad(start, end), self._y[start:end]
             else:
                 yield self._x[start:end], self._y[start:end]
 
 
 class DatasetIterator(object):
+    """ An iterator over batches extracted from the dataset. """
+
     def __init__(self, x, y, batch_size):
         self._x = x
         self._y = y
@@ -131,7 +136,7 @@ class DBN(object):
             theano_rng = RandomStreams(numpy_rng.randint(2 ** 30))
 
         # allocate symbolic variables for the data
-        self.x = T.matrix('x')  # the data is presented as rasterized images
+        self.x = T.fmatrix('x')  # the data is presented as rasterized images
         self.y = T.ivector('y')  # the labels are presented as 1D vector
                                  # of [int] labels
 
@@ -209,6 +214,7 @@ class DBN(object):
         # compute the cost for second phase of training, defined as the
         # negative log likelihood of the logistic regression (output) layer
         self.finetune_cost = self.logLayer.negative_log_likelihood(self.y)
+        self.finetune_cost_sum = self.logLayer.negative_log_likelihood_sum(self.y)
 
         # compute the gradients with respect to the model parameters
         # symbolic variable that points to the number of errors made on the
@@ -244,32 +250,29 @@ class DBN(object):
     def get_SGD_trainer(self):
         """ Returns a plain SGD minibatch trainer with learning rate as param.
         """
-        batch_x = T.matrix('batch_x')
+        batch_x = T.fmatrix('batch_x')
         batch_y = T.ivector('batch_y')
-        ###learning_rate = T.matrix('lr')  # learning rate to use
-        learning_rate = T.scalar('lr')  # learning rate to use
+        learning_rate = T.fscalar('lr')  # learning rate to use
         # compute the gradients with respect to the model parameters
         gparams = T.grad(self.finetune_cost, self.params)
 
         # compute list of fine-tuning updates
         updates = OrderedDict()
         for i, (param, gparam) in enumerate(zip(self.params, gparams)):
-            ###updates[param] = param - gparam * learning_rate[i]
-            updates[param] = param - gparam * learning_rate
+            updates[param] = param - gparam * learning_rate 
 
         train_fn = theano.function(inputs=[theano.Param(batch_x), 
             theano.Param(batch_y),
             theano.Param(learning_rate)],
-            outputs=self.finetune_cost,
+            outputs=self.finetune_cost_sum,
             updates=updates,
             givens={self.x: batch_x, self.y: batch_y})
 
         return train_fn
 
-
     def valid_and_test_scores(self, valid_set, test_set):
         """ Returns functions to get current validation and test scores. """
-        batch_x = T.matrix('batch_x')
+        batch_x = T.fmatrix('batch_x')
         batch_y = T.ivector('batch_y')
         score = theano.function(inputs=[theano.Param(batch_x), theano.Param(batch_y)],
                 outputs=self.errors,
@@ -413,7 +416,7 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
 
         # we check the validation loss on every epoch
         validation_losses = validate_model()
-        this_validation_loss = numpy.mean(validation_losses)
+        this_validation_loss = numpy.mean(validation_losses)  # TODO this is a mean of means (with different lengths)
         print('  epoch %i, validation error %f %%' % \
               (epoch, this_validation_loss * 100.))
         # if we got the best validation score until now
@@ -428,7 +431,7 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
             best_validation_loss = this_validation_loss
             # test it on the test set
             test_losses = test_model()
-            test_score = numpy.mean(test_losses)
+            test_score = numpy.mean(test_losses)  # TODO this is a mean of means (with different lengths)
             print(('  epoch %i, test error of '
                    'best model %f %%') %
                   (epoch, test_score * 100.))

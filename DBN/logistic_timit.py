@@ -121,6 +121,9 @@ class LogisticRegression(object):
         # i.e., the mean log-likelihood across the minibatch.
         return -T.mean(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
 
+    def negative_log_likelihood_sum(self, y):
+        return -T.sum(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
+
     def errors(self, y):
         """Return a float representing the number of errors in the minibatch
         over the total number of examples of the minibatch ; zero one
