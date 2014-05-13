@@ -103,7 +103,8 @@ class DBN(object):
     """
 
     def __init__(self, numpy_rng, theano_rng=None, n_ins=N_FEATURES * N_FRAMES,
-                 hidden_layers_sizes=[1024, 1024], n_outs=62 * 3):
+                 hidden_layers_sizes=[1024, 1024], n_outs=62 * 3,
+                 rho=0.95, eps=1.E-10):
         """This class is made to support a variable number of layers.
 
         :type numpy_rng: numpy.random.RandomState
@@ -129,6 +130,12 @@ class DBN(object):
         self.rbm_layers = []
         self.params = []
         self.n_layers = len(hidden_layers_sizes)
+        #self._rho = shared(numpy.cast['float32'](rho), name='rho')  # for adadelta
+        #self._eps = shared(numpy.cast['float32'](eps), name='eps')  # for adadelta
+        self._rho = rho
+        self._eps = eps
+        self._accugrads = []  # for adadelta
+        self._accudeltas = []  # for adadelta
 
         assert self.n_layers > 0
 
@@ -184,6 +191,8 @@ class DBN(object):
             # biases in the RBM are parameters of those RBMs, but not
             # of the DBN.
             self.params.extend(sigmoid_layer.params)
+            self._accugrads.extend([shared(value=numpy.zeros((input_size, hidden_layers_sizes[i]), dtype='float32'), name='accugrad_W', borrow=True), shared(value=numpy.zeros((hidden_layers_sizes[i], ), dtype='float32'), name='accugrad_b', borrow=True)]) # TODO
+            self._accudeltas.extend([shared(value=numpy.zeros((input_size, hidden_layers_sizes[i]), dtype='float32'), name='accudelta_W', borrow=True), shared(value=numpy.zeros((hidden_layers_sizes[i], ), dtype='float32'), name='accudelta_b', borrow=True)]) # TODO
 
             # Construct an RBM that shared weights with this layer
             if i == 0:
@@ -210,6 +219,8 @@ class DBN(object):
             n_in=hidden_layers_sizes[-1],
             n_out=n_outs)
         self.params.extend(self.logLayer.params)
+        self._accugrads.extend([shared(value=numpy.zeros((hidden_layers_sizes[-1], n_outs), dtype='float32'), name='accugrad_W', borrow=True), shared(value=numpy.zeros((n_outs, ), dtype='float32'), name='accugrad_b', borrow=True)]) # TODO
+        self._accudeltas.extend([shared(value=numpy.zeros((hidden_layers_sizes[-1], n_outs), dtype='float32'), name='accudelta_W', borrow=True), shared(value=numpy.zeros((n_outs, ), dtype='float32'), name='accudelta_b', borrow=True)]) # TODO
 
         # compute the cost for second phase of training, defined as the
         # negative log likelihood of the logistic regression (output) layer
@@ -253,18 +264,161 @@ class DBN(object):
         batch_x = T.fmatrix('batch_x')
         batch_y = T.ivector('batch_y')
         learning_rate = T.fscalar('lr')  # learning rate to use
+        cost = self.finetune_cost_sum
         # compute the gradients with respect to the model parameters
-        gparams = T.grad(self.finetune_cost, self.params)
+        gparams = T.grad(cost, self.params)
 
         # compute list of fine-tuning updates
         updates = OrderedDict()
-        for i, (param, gparam) in enumerate(zip(self.params, gparams)):
+        for param, gparam in zip(self.params, gparams):
             updates[param] = param - gparam * learning_rate 
 
         train_fn = theano.function(inputs=[theano.Param(batch_x), 
             theano.Param(batch_y),
             theano.Param(learning_rate)],
-            outputs=self.finetune_cost_sum,
+            outputs=cost,
+            updates=updates,
+            givens={self.x: batch_x, self.y: batch_y})
+
+        return train_fn
+
+    def get_adadelta_trainer(self):
+        """ Returns an Adadelta (Zeiler 2012) trainer using self._rho and self._eps params.
+        """
+        batch_x = T.fmatrix('batch_x')
+        batch_y = T.ivector('batch_y')
+        cost = self.finetune_cost_sum
+        # compute the gradients with respect to the model parameters
+        gparams = T.grad(cost, self.params)
+
+        # compute list of fine-tuning updates
+        updates = OrderedDict()
+        for accugrad, accudelta, param, gparam in zip(self._accugrads,
+                self._accudeltas, self.params, gparams):
+            # c.f. Algorithm 1 in the Adadelta paper (Zeiler 2012)
+            agrad = self._rho * accugrad + (1 - self._rho) * gparam * gparam
+            dx = - T.sqrt((accudelta + self._eps) / (agrad + self._eps)) * gparam
+            updates[accudelta] = self._rho * accudelta + (1 - self._rho) * dx * dx
+            updates[param] = param + dx
+            updates[accugrad] = agrad
+
+        train_fn = theano.function(inputs=[theano.Param(batch_x), 
+            theano.Param(batch_y)],
+            outputs=cost,
+            updates=updates,
+            givens={self.x: batch_x, self.y: batch_y})
+
+        return train_fn
+
+    def get_adagrad_trainer(self):
+        """ Returns an Adagrad (Duchi et al. 2010) trainer using a learning rate.
+        """
+        batch_x = T.fmatrix('batch_x')
+        batch_y = T.ivector('batch_y')
+        learning_rate = T.fscalar('lr')  # learning rate to use
+        cost = self.finetune_cost_sum
+        # compute the gradients with respect to the model parameters
+        gparams = T.grad(cost, self.params)
+
+        # compute list of fine-tuning updates
+        updates = OrderedDict()
+        for accugrad, param, gparam in zip(self._accugrads, self.params, gparams):
+            # c.f. Algorithm 1 in the Adadelta paper (Zeiler 2012)
+            agrad = accugrad + gparam * gparam
+            dx = - (learning_rate / T.sqrt(agrad + self._eps)) * gparam
+            updates[param] = param + dx
+            updates[accugrad] = agrad
+
+        train_fn = theano.function(inputs=[theano.Param(batch_x), 
+            theano.Param(batch_y),
+            theano.Param(learning_rate)],
+            outputs=cost,
+            updates=updates,
+            givens={self.x: batch_x, self.y: batch_y})
+
+        return train_fn
+
+    def get_SAG_trainer(self):
+        """ Returns a Stochastic Averaged Gradient (Bach & Moulines 2011) trainer.
+
+        This is based on Bach 2013 slides: 
+        PRavg(theta_n) = Polyak-Ruppert averaging = (1+n)^{-1} * \sum_{k=0}^n theta_k
+        theta_n = theta_{n-1} - gamma [ f'_n(PR_avg(theta_{n-1})) + f''_n(PR_avg(
+                  theta_{n-1})) * (theta_{n-1} - PR_avg(theta_{n-1}))]
+
+        That returns two trainers: one for the first epoch, one for subsequent epochs.
+        We use self._accudeltas to but the Polyak-Ruppert averaging,
+        and self._accugrads for the number of iterations (updates).
+        """
+        print "UNFINISHED, see TODO in get_SAG_trainer()"
+        sys.exit(-1)
+
+        batch_x = T.fmatrix('batch_x')
+        batch_y = T.ivector('batch_y')
+        learning_rate = T.fscalar('lr')  # learning rate to use
+        cost = self.finetune_cost_sum
+
+        # First trainer:
+        gparams = T.grad(cost, self.params)
+        updates = OrderedDict()
+        for accudelta, accugrad, param, gparam in zip(self._accudeltas, self._accugrads, self.params, gparams):
+            theta = param - gparam * learning_rate 
+            updates[accudelta] = (theta + accudelta * accugrad) / (accugrad + 1.)
+            updates[param] = theta
+            updates[accugrad] = accugrad + 1.
+
+        train_fn_init = theano.function(inputs=[theano.Param(batch_x), 
+            theano.Param(batch_y),
+            theano.Param(learning_rate)],
+            outputs=cost,
+            updates=updates,
+            givens={self.x: batch_x, self.y: batch_y})
+
+        # Second trainer:
+        gparams = T.grad(cost, self._accudeltas)  # TODO recreate the network with 
+        # (TODO) self._accudeltas instead of self.params so that we can compute the cost
+        hparams = T.grad(cost, gparams)
+
+        # compute list of fine-tuning updates
+        updates = OrderedDict()
+        for accudelta, accugrad, param, gparam, hparam in zip(self._accudeltas, self._accugrads, self.params, gparams, hparams):
+            theta = param - learning_rate * (gparam + hparam * (param - accudelta))
+            updates[accudelta] = (theta + accudelta * accugrad) / (accugrad + 1.)
+            updates[param] = theta
+            updates[accugrad] = accugrad + 1.
+
+        train_fn = theano.function(inputs=[theano.Param(batch_x), 
+            theano.Param(batch_y),
+            theano.Param(learning_rate)],
+            outputs=cost,
+            updates=updates,
+            givens={self.x: batch_x, self.y: batch_y})
+
+        return train_fn_init, train_fn
+
+    def get_SGD_ld_trainer(self):
+        """ Returns an SGD-ld trainer (Schaul et al. 2012).
+        """
+        print "UNFINISHED, see TODO in get_SGD_ld_trainer()"
+        sys.exit(-1)
+
+        batch_x = T.fmatrix('batch_x')
+        batch_y = T.ivector('batch_y')
+        cost = self.finetune_cost_sum
+        # compute the gradients with respect to the model parameters
+        gparams = T.grad(cost, self.params)
+        # INIT TODO
+
+        # compute list of fine-tuning updates
+        updates = OrderedDict()
+        for accugrad, accudelta, accuhess, param, gparam in zip(self._accugrads, self._accudeltas, self._accuhess, self.params, gparams):
+            pass  # TODO
+            # TODO 
+            # TODO 
+
+        train_fn = theano.function(inputs=[theano.Param(batch_x), 
+            theano.Param(batch_y)],
+            outputs=cost,
             updates=updates,
             givens={self.x: batch_x, self.y: batch_y})
 
@@ -328,18 +482,19 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     with open('timit_to_int_and_to_state_dicts_tuple.pickle') as f:  # TODO
         to_int, _ = cPickle.load(f)
     train_set_iterator = DatasetSentencesIterator(train_set_x, train_set_y,
-            to_int)
+            to_int, N_FRAMES)
     valid_set_iterator = DatasetSentencesIterator(valid_set_x, valid_set_y,
-            to_int)
+            to_int, N_FRAMES)
     test_set_iterator = DatasetSentencesIterator(test_set_x, test_set_y,
-            to_int)
+            to_int, N_FRAMES)
 
     # numpy random generator
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
     # construct the Deep Belief Network
-    dbn = DBN(numpy_rng=numpy_rng, n_ins=train_set_x.shape[1],
-              hidden_layers_sizes=[2496, 2496, 2496],
+    dbn = DBN(numpy_rng=numpy_rng, n_ins=N_FRAMES * N_FEATURES,
+              #hidden_layers_sizes=[2496, 2496, 2496],
+              hidden_layers_sizes=[1024, 1024, 1024],
               n_outs=len(set(train_set_y)))#62 * 3)
 
     #########################
@@ -381,9 +536,14 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
 
     # get the training, validation and testing function for the model
     print '... getting the finetuning functions'
-    train_fn = dbn.get_SGD_trainer()
+    #train_fn = dbn.get_SGD_trainer()
+    #train_fn = dbn.get_adagrad_trainer()
+    train_fn_init, train_fn = dbn.get_SAG_trainer()
+    #train_fn = dbn.get_adadelta_trainer()
+    #validate_model, test_model = dbn.valid_and_test_scores(
+    #        valid_set=valid_set_iterator, test_set=test_set_iterator) TODO TODO TODO
     validate_model, test_model = dbn.valid_and_test_scores(
-            valid_set=valid_set_iterator, test_set=test_set_iterator)
+            valid_set=test_set_iterator, test_set=test_set_iterator)
 
     print '... finetuning the model'
     # early-stopping parameters
@@ -401,12 +561,17 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     epoch = 0
 
     while (epoch < training_epochs) and (not done_looping):
+        # TODO make finetune_lr evolve \propto C.n^{-a} for SGD (only)
         epoch = epoch + 1
-        train_set_iterator = DatasetSentencesIterator(train_set_x, 
-                train_set_y, to_int)
         avg_costs = []
-        for iteration, (x, y) in enumerate(train_set_iterator):
-            avg_cost = train_fn(x, y, finetune_lr)
+        ###for iteration, (x, y) in enumerate(train_set_iterator): TODO TODO TODO
+        for iteration, (x, y) in enumerate(test_set_iterator):
+            if epoch == 1:
+                avg_cost = train_fn_init(x, y, finetune_lr)
+            else:
+                avg_cost = train_fn(x, y, finetune_lr)
+            #avg_cost = train_fn(x, y, finetune_lr)
+            #avg_cost = train_fn(x, y)
             avg_costs.append(avg_cost)
             #print('  epoch %i, sentence %i, '
             #'avg cost for this sentence %f' % \
