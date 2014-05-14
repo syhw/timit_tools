@@ -443,7 +443,7 @@ class DBN(object):
 
 
 def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
-             pretrain_lr=0.01, k=1, training_epochs=100, # TODO 100+
+             pretrain_lr=0.01, k=1, training_epochs=200, # TODO 100+
              dataset=DATASET, batch_size=100):
     """
 
