@@ -22,7 +22,8 @@ from prep_timit import load_data
 
 #DATASET = '/media/bigdata/TIMIT'
 SPEAKERS = False
-DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
+###DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
+DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
 #DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/std_split'
 if SPEAKERS:
     DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT'
@@ -405,7 +406,8 @@ def train_DBN(finetune_lr=0.01, pretraining_epochs=100,
     """
 
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes=N_FRAMES, features='MFCC', scaling='normalize', pca_whiten=False, cv_frac=0.2, dataset_name='TIMIT_wo_sa', speakers=SPEAKERS)
+    ###datasets = load_data(dataset, nframes=N_FRAMES, features='MFCC', scaling='normalize', pca_whiten=False, cv_frac=0.2, dataset_name='TIMIT_wo_sa', speakers=SPEAKERS)
+    datasets = load_data(dataset, nframes=N_FRAMES, features='MFCC', scaling='normalize', pca_whiten=False, cv_frac='fixed', dataset_name='TIMIT_train_dev_test', speakers=SPEAKERS)
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1] 

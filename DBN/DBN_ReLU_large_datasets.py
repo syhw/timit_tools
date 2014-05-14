@@ -27,7 +27,7 @@ N_FRAMES = 13  # HAS TO BE AN ODD NUMBER
                #(same number before and after center frame)
 PRELEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-MIN_FRAMES_PER_SENTENCE = 10
+MIN_FRAMES_PER_SENTENCE = 26
 BORROW = True
 output_file_name = 'dbn_ReLu_2496_units_13_frames'
 
@@ -46,6 +46,9 @@ class DatasetSentencesIterator(object):
             if s and i - self._start_end[-1][0] > MIN_FRAMES_PER_SENTENCE:
                 self._start_end[-1].append(i)
                 self._start_end.append([i])
+            elif s:
+                print "ERROR: less than", MIN_FRAMES_PER_SENTENCE, "frames in",
+                print self._start_end[-1][0], i
         self._start_end[-1].append(i+1)
 
     def _stackpad(self, start, end):
@@ -104,7 +107,7 @@ class DBN(object):
 
     def __init__(self, numpy_rng, theano_rng=None, n_ins=N_FEATURES * N_FRAMES,
                  hidden_layers_sizes=[1024, 1024], n_outs=62 * 3,
-                 rho=0.95, eps=1.E-10):
+                 rho=0.90, eps=1.E-6):
         """This class is made to support a variable number of layers.
 
         :type numpy_rng: numpy.random.RandomState
@@ -424,23 +427,19 @@ class DBN(object):
 
         return train_fn
 
-    def valid_and_test_scores(self, valid_set, test_set):
-        """ Returns functions to get current validation and test scores. """
+    def score_classif(self, given_set):
+        """ Returns functions to get current classification scores. """
         batch_x = T.fmatrix('batch_x')
         batch_y = T.ivector('batch_y')
         score = theano.function(inputs=[theano.Param(batch_x), theano.Param(batch_y)],
                 outputs=self.errors,
                 givens={self.x: batch_x, self.y: batch_y})
 
-        # Create a function that scans the entire validation set
-        def valid_score():
-            return [score(batch_x, batch_y) for batch_x, batch_y in valid_set]
+        # Create a function that scans the entire set given as input
+        def scoref():
+            return [score(batch_x, batch_y) for batch_x, batch_y in given_set]
 
-        # Create a function that scans the entire test set
-        def test_score():
-            return [score(batch_x, batch_y) for batch_x, batch_y in test_set]
-
-        return valid_score, test_score
+        return scoref
 
 
 def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
@@ -468,6 +467,7 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     #datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='normalize', cv_frac=0.2, speakers=False, numpy_array_only=True) 
     #datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='student', cv_frac='fixed', speakers=False, numpy_array_only=True) 
     datasets = load_data(dataset, nframes=1, features='fbank', scaling='student', cv_frac='fixed', speakers=False, numpy_array_only=True) 
+    #datasets = load_data(dataset, nframes=1, features='fbank', scaling='student', cv_frac=0.2, speakers=False, numpy_array_only=True) 
 
     train_set_x, train_set_y = datasets[0]  # if speakers, do test/test/test
     valid_set_x, valid_set_y = datasets[1]
@@ -477,6 +477,9 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     print "train set size", train_set_x.shape[0]
     print "validation set size", valid_set_x.shape[0]
     print "test set size", test_set_x.shape[0]
+    print "phones in train", len(set(train_set_y))
+    print "phones in valid", len(set(valid_set_y))
+    print "phones in test", len(set(test_set_y))
 
     to_int = {}
     with open('timit_to_int_and_to_state_dicts_tuple.pickle') as f:  # TODO
@@ -536,14 +539,10 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
 
     # get the training, validation and testing function for the model
     print '... getting the finetuning functions'
-    #train_fn = dbn.get_SGD_trainer()
-    #train_fn = dbn.get_adagrad_trainer()
-    train_fn_init, train_fn = dbn.get_SAG_trainer()
-    #train_fn = dbn.get_adadelta_trainer()
-    #validate_model, test_model = dbn.valid_and_test_scores(
-    #        valid_set=valid_set_iterator, test_set=test_set_iterator) TODO TODO TODO
-    validate_model, test_model = dbn.valid_and_test_scores(
-            valid_set=test_set_iterator, test_set=test_set_iterator)
+    train_fn = dbn.get_adadelta_trainer()
+    train_scoref = dbn.score_classif(train_set_iterator)
+    valid_scoref = dbn.score_classif(valid_set_iterator)
+    test_scoref = dbn.score_classif(test_set_iterator)
 
     print '... finetuning the model'
     # early-stopping parameters
@@ -561,26 +560,21 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     epoch = 0
 
     while (epoch < training_epochs) and (not done_looping):
-        # TODO make finetune_lr evolve \propto C.n^{-a} for SGD (only)
         epoch = epoch + 1
         avg_costs = []
-        ###for iteration, (x, y) in enumerate(train_set_iterator): TODO TODO TODO
-        for iteration, (x, y) in enumerate(test_set_iterator):
-            if epoch == 1:
-                avg_cost = train_fn_init(x, y, finetune_lr)
-            else:
-                avg_cost = train_fn(x, y, finetune_lr)
-            #avg_cost = train_fn(x, y, finetune_lr)
-            #avg_cost = train_fn(x, y)
+        for iteration, (x, y) in enumerate(train_set_iterator):
+            avg_cost = train_fn(x, y)
             avg_costs.append(avg_cost)
             #print('  epoch %i, sentence %i, '
             #'avg cost for this sentence %f' % \
             #      (epoch, iteration, avg_cost))
         print('  epoch %i, avg costs %f' % \
               (epoch, numpy.mean(avg_costs)))
+        print('  epoch %i, training error %f %%' % \
+              (epoch, numpy.mean(train_scoref()) * 100.))
 
         # we check the validation loss on every epoch
-        validation_losses = validate_model()
+        validation_losses = valid_scoref()
         this_validation_loss = numpy.mean(validation_losses)  # TODO this is a mean of means (with different lengths)
         print('  epoch %i, validation error %f %%' % \
               (epoch, this_validation_loss * 100.))
@@ -595,12 +589,12 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
             # save best validation score and iteration number
             best_validation_loss = this_validation_loss
             # test it on the test set
-            test_losses = test_model()
+            test_losses = test_scoref()
             test_score = numpy.mean(test_losses)  # TODO this is a mean of means (with different lengths)
             print(('  epoch %i, test error of '
                    'best model %f %%') %
                   (epoch, test_score * 100.))
-        if patience <= iteration:
+        if patience <= iteration:  # TODO correct that
             done_looping = True
             break
 
