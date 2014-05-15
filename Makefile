@@ -5,7 +5,7 @@ help:
 	@echo -e "Usage (in order):"
 	@echo -e "make prepare dataset=~/postdoc/datasets/TIMIT/train_dev_test_split"
 	@echo -e "make train dataset_train_folder=~/postdoc/datasets/TIMIT/train_dev_test_split/train"
-	@echo -e "make test dataset_test_folder=~/postdoc/datasets/TIMIT/train_dev_test_split/test"
+	@echo -e "make test_monophones dataset_test_folder=~/postdoc/datasets/TIMIT/train_dev_test_split/test"
 
 
 prepare_timit: wav_config src/mfcc_and_gammatones.py src/timit_to_htk_labels.py
@@ -359,7 +359,7 @@ all_CSJ:
 	make bigram_LM
 	make test_monophones_bigram_LM dataset_test_folder=$(dataset)/test
 	make align input_scp=$(dataset)/train/train.scp input_mlf=$(dataset)/train/train.mlf output_mlf=$(dataset)/aligned_train.mlf
-		make align input_scp=$(dataset)/test/test.scp input_mlf=$(dataset)/test/test.mlf output_mlf=$(dataset)/aligned_test.mlf
+	make align input_scp=$(dataset)/test/test.scp input_mlf=$(dataset)/test/test.mlf output_mlf=$(dataset)/aligned_test.mlf
 
 
 test_my_bigram:

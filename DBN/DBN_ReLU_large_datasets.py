@@ -2,6 +2,7 @@ import cPickle
 import os
 import sys
 import time
+import socket
 
 import numpy
 from collections import OrderedDict, defaultdict
@@ -21,7 +22,8 @@ from prep_timit import load_data
 #DATASET = '/media/bigdata/TIMIT'
 #DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/wo_sa'
 DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
-#DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
+if socket.gethostname() == "syhws-MacBook-Pro.local":
+    DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
 N_FEATURES = 40  # filterbanks
 N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)

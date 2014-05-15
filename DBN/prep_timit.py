@@ -1,4 +1,4 @@
-import theano, copy, sys, json, cPickle
+import theano, copy, sys, json, cPickle, socket
 import theano.tensor as T
 import numpy as np
 from numpy import zeros, pad
@@ -8,8 +8,10 @@ USE_CACHING = True # beware if you use RBM / GRBM or gammatones /
                    # speaker labels alternatively, set it to False
 TRAIN_CLASSIFIERS_1_FRAME = False # train sklearn classifiers on 1 frame
 TRAIN_CLASSIFIERS = False # train sklearn classifiers to compare the DBN to
+
 prefix_path = '/fhgfs/bootphon/scratch/gsynnaeve/tmp_npy/'
-#prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
+if socket.gethostname() == "syhws-MacBook-Pro.local":
+    prefix_path = '/Users/gabrielsynnaeve/postdoc/datasets/tmp_npy/'
 
 def padding(nframes, x, y):
     """ Dirty hacky padding for a minimum of nframes """
@@ -275,7 +277,7 @@ def prep_data(dataset, nframes=1, features='MFCC', scaling='normalize',
     dev_y_f = None
     if dev:
         dev_y_f = zeros(dev_y.shape[0], dtype='int32')
-        for i, e in enumerate(test_y):
+        for i, e in enumerate(dev_y):
             dev_y_f[i] = to_int[e]
 
     if speakers:
