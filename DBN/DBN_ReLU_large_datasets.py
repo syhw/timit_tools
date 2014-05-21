@@ -35,7 +35,7 @@ output_file_name = 'dbn_ReLu_2496_units_13_frames'
 
 
 class DatasetSentencesIterator(object):
-    """ An iterator of setences of the dataset. """
+    """ An iterator on sentences of the dataset. """
 
     def __init__(self, x, y, phn_to_st, nframes=1):
         self._x = x
@@ -48,9 +48,9 @@ class DatasetSentencesIterator(object):
             if s and i - self._start_end[-1][0] > MIN_FRAMES_PER_SENTENCE:
                 self._start_end[-1].append(i)
                 self._start_end.append([i])
-            elif s:
-                print "ERROR: less than", MIN_FRAMES_PER_SENTENCE, "frames in",
-                print self._start_end[-1][0], i
+#            elif s:
+#                print "less than", MIN_FRAMES_PER_SENTENCE, "frames in",
+#                print self._start_end[-1][0], i
         self._start_end[-1].append(i+1)
 
     def _stackpad(self, start, end):
