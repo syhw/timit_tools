@@ -25,10 +25,14 @@ if socket.gethostname() == "syhws-MacBook-Pro.local":
 N_FEATURES = 40  # filterbanks
 N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
+N_FRAMES_WINDOW = 1 # number of frames to offset self.p_y with self.x
 BORROW = True
 output_file_name = 'SRNN'
 
 
+def relu_f(v):
+    # could do: T.switch(v > 0., v, 0 * v)
+    return v + abs(v) / 2.
 
 
 class ReLU(object):
@@ -46,8 +50,8 @@ class ReLU(object):
         self.input = input
         self.W = W
         self.b = b
-        lin_output = T.dot(input, self.W) + self.b
-        self.output = lin_output + abs(lin_output) / 2.
+        lin_output = T.dot(self.input, self.W) + self.b
+        self.output = relu_f(lin_output)
         self.params = [self.W, self.b]
 
 
@@ -57,15 +61,17 @@ class StackReLU(ReLU):
         super(StackReLU, self).__init__(rng, input, n_in, n_out)
         if Ws is None:
             Ws_values = numpy.asarray(rng.uniform(
-                    low=-numpy.sqrt(6. / (n_in + n_out)),
-                    high=numpy.sqrt(6. / (n_in + n_out)),
-                    size=(n_in, n_out)), dtype=theano.config.floatX)
+                    low=-numpy.sqrt(6. / (n_in_stack + n_out)),
+                    high=numpy.sqrt(6. / (n_in_stack + n_out)),
+                    size=(n_in_stack, n_out)), dtype=theano.config.floatX)
             Ws_values *= 4  # TODO CHECK
             Ws = shared(value=Ws_values, name='Ws', borrow=True)
+        self.input_stack = in_stack
         self.Ws = Ws  # weights of the reccurrent connection
+        lin_output = (T.dot(self.input, self.W) 
+                + T.dot(self.input_stack, self.Ws) + self.b)
+        self.output = relu_f(lin_output)
         self.params = [self.W, self.b, self.Ws]  # order is important! W, b, Ws
-        lin_output = T.dot(input, self.W) + T.dot(in_stack, self.Ws) + self.b
-        self.output = lin_output + abs(lin_output) / 2.
 
 
 class SRNN(object):
@@ -75,10 +81,9 @@ class SRNN(object):
     def __init__(self, numpy_rng, theano_rng=None, 
             n_ins=N_FEATURES * N_FRAMES,
             relu_layers_sizes=[1024, 1024, 1024],
-            recurrent_connections=[2],  # layer(s)
             n_outs=62 * 3,
             rho=0.90, eps=1.E-6):
-        """ TODO 
+        """ TODO WRITEME
         """
 
         self.relu_layers = []
@@ -97,17 +102,15 @@ class SRNN(object):
 
         self.x = T.fmatrix('x')
         self.y = T.ivector('y')
-        self.previous_p_y_given_x = T.fmatrix('p_y_given_x')
+        self.p_y_in = T.fmatrix('p_y')
 
-        input_repu_layer = StackReLU(rng=numpy_rng,
-                input=self.x, in_stack=self.previous_p_y_given_x,
+        input_relu_layer = StackReLU(rng=numpy_rng,
+                input=self.x, in_stack=self.p_y_in,
                 n_in=n_ins, n_in_stack=n_outs, n_out=relu_layers_sizes[0])
-        self.relu_layers.append(input_repu_layer)
-        self.params.extend(input_repu_layer.params)
-        self._accugrads.extend([shared(value=numpy.zeros((n_ins, relu_layers_sizes[0]), dtype='float32'), name='accugrad_W', borrow=True), shared(value=numpy.zeros((relu_layers_sizes[0], ), dtype='float32'), name='accugrad_b', borrow=True)])
-        self._accugrads.extend([shared(value=numpy.zeros((n_ins, relu_layers_sizes[0]), dtype='float32'), name='accugrad_Ws', borrow=True)])
-        self._accudeltas.extend([shared(value=numpy.zeros((n_outs, relu_layers_sizes[0]), dtype='float32'), name='accudelta_W', borrow=True), shared(value=numpy.zeros((relu_layers_sizes[0], ), dtype='float32'), name='accudelta_b', borrow=True)])
-        self._accudeltas.extend([shared(value=numpy.zeros((n_outs, relu_layers_sizes[0]), dtype='float32'), name='accudelta_Ws', borrow=True)])
+        self.relu_layers.append(input_relu_layer)
+        self.params.extend(input_relu_layer.params)
+        self._accugrads.extend([shared(value=numpy.zeros((n_ins, relu_layers_sizes[0]), dtype='float32'), name='accugrad_W', borrow=True), shared(value=numpy.zeros((relu_layers_sizes[0], ), dtype='float32'), name='accugrad_b', borrow=True), shared(value=numpy.zeros((n_outs, relu_layers_sizes[0]), dtype='float32'), name='accugrad_Ws', borrow=True)])
+        self._accudeltas.extend([shared(value=numpy.zeros((n_ins, relu_layers_sizes[0]), dtype='float32'), name='accudelta_W', borrow=True), shared(value=numpy.zeros((relu_layers_sizes[0], ), dtype='float32'), name='accudelta_b', borrow=True), shared(value=numpy.zeros((n_outs, relu_layers_sizes[0]), dtype='float32'), name='accudelta_Ws', borrow=True)])
 
         for i in xrange(1, self.n_layers):
             input_size = relu_layers_sizes[i-1]
@@ -131,14 +134,14 @@ class SRNN(object):
             n_in=relu_layers_sizes[-1],
             n_out=n_outs)
         self.params.extend(self.logLayer.params)
-        self._accugrads.extend([shared(value=numpy.zeros((relu_layers_sizes[-1], n_outs), dtype='float32'), name='accugrad_W', borrow=True), shared(value=numpy.zeros((n_outs, ), dtype='float32'), name='accugrad_b', borrow=True)]) # TODO
-        self._accudeltas.extend([shared(value=numpy.zeros((relu_layers_sizes[-1], n_outs), dtype='float32'), name='accudelta_W', borrow=True), shared(value=numpy.zeros((n_outs, ), dtype='float32'), name='accudelta_b', borrow=True)]) # TODO
+        self._accugrads.extend([shared(value=numpy.zeros((relu_layers_sizes[-1], n_outs), dtype='float32'), name='accugrad_W', borrow=True), shared(value=numpy.zeros((n_outs, ), dtype='float32'), name='accugrad_b', borrow=True)])
+        self._accudeltas.extend([shared(value=numpy.zeros((relu_layers_sizes[-1], n_outs), dtype='float32'), name='accudelta_W', borrow=True), shared(value=numpy.zeros((n_outs, ), dtype='float32'), name='accudelta_b', borrow=True)])
 
         # compute the cost for second phase of training, defined as the
         # negative log likelihood of the logistic regression (output) layer
         self.finetune_cost = self.logLayer.negative_log_likelihood(self.y)
         self.finetune_cost_sum = self.logLayer.negative_log_likelihood_sum(self.y)
-        self.p_y_given_x = self.logLayer.p_y_given_x
+        self.p_y_out = self.logLayer.p_y_given_x
 
         # compute the gradients with respect to the model parameters
         # symbolic variable that points to the number of errors made on the
@@ -155,8 +158,20 @@ class SRNN(object):
     def get_stacked_adadelta_trainer(self):
         """ Returns an Adadelta (Zeiler 2012) trainer using self._rho and
         self._eps params, that works on stacks, that is first a classification
-        step, and then a step taking these outputs into account.
+        step to get the output probabilities, and then a step taking these
+        outputs into account.
         """
+        batch_x = T.fmatrix('batch_x')
+        batch_p_y = T.fmatrix('batch_p_y')
+        batch_y = T.ivector('batch_y')
+        #p_y_init = T.zeros((batch_x.shape[0], self.n_outs)) + 1./self.n_outs  # TODO try = 0
+
+        first_pass = theano.function(inputs=[theano.Param(batch_x),
+            theano.Param(batch_p_y)],
+            outputs=self.p_y_out,
+            givens={self.x: batch_x,
+                    self.p_y_in: batch_p_y})
+
         cost = self.finetune_cost_sum
         gparams = T.grad(cost, self.params)
         updates = OrderedDict()
@@ -169,25 +184,13 @@ class SRNN(object):
             updates[param] = param + dx
             updates[accugrad] = agrad
 
-        batch_x = T.fmatrix('batch_x')
-        batch_p_y_given_x = T.fmatrix('batch_x')
-        batch_y = T.ivector('batch_y')
-        p_y_given_x_init = T.zeros((batch_x.shape[0], self.n_outs)) + 1./self.n_outs
-
-        first_pass = theano.function(inputs=[theano.Param(batch_x)],
-            outputs=self.p_y_given_x,
-            givens={self.x: batch_x,
-                self.previous_p_y_given_x: p_y_given_x_init})
-
         train_fn = theano.function(inputs=[theano.Param(batch_x), 
-            theano.Param(batch_p_y_given_x), theano.Param(batch_y)],
+            theano.Param(batch_p_y), theano.Param(batch_y)],
             outputs=cost,
             updates=updates,
-            givens={
-                self.x: batch_x,
-                self.previous_p_y_given_x: batch_p_y_given_x,
-                self.y: batch_y
-                })
+            givens={self.x: batch_x,
+                self.p_y_in: batch_p_y,
+                self.y: batch_y})
 
         return first_pass, train_fn
 
@@ -212,19 +215,18 @@ class SRNN(object):
             
         #p_y_given_x_init = shared(numpy.asarray(numpy.random.uniform((1, self.n_outs)), dtype='float32'))
         p_y_given_x_init = T.zeros((1, self.n_outs)) + 1./self.n_outs
-        #def step(x, previous_p_y_given_x=p_y_given_x_init):
 
-        def one_step(x_t, previous_p_y_given_x):
+        def one_step(x_t, p_y):
             self.x = x_t
-            self.previous_p_y_given_x = previous_p_y_given_x
-            return [x_t, self.p_y_given_x]
+            self.p_y_in = p_y
+            return [x_t, self.p_y_out]
         
         batch_x = T.fmatrix('batch_x')
         batch_y = T.ivector('batch_y')
-        #batch_previous_p_y_given_x = T.fmatrix('batch_previous_p_y_given_x')
-        [x, p_y_given_x], _ = theano.scan(lambda x_t, p_y_g_x_m1, *_: one_step(x_t, p_y_g_x_m1),
+        #batch_p_y = T.fmatrix('batch_p_y')
+        [x, p_y_out], _ = theano.scan(lambda x_t, p_y_g_x_m1, *_: one_step(x_t, p_y_g_x_m1),
                 sequences=batch_x[:-1],
-                outputs_info=[None, p_y_given_x_init],)
+                outputs_info=[None, p_y_init],)
                 
 
         train_fn = theano.function(inputs=[theano.Param(batch_x), 
@@ -232,8 +234,8 @@ class SRNN(object):
             outputs=cost,
             updates=updates,
             givens={self.y: batch_y,
-                self.previous_p_y_given_x: T.concatenate([p_y_given_x_init, 
-                    p_y_given_x], axis=0),
+                self.p_y_in: T.concatenate([p_y_init, 
+                    p_y_out], axis=0),
                 self.x: batch_x
                 })
 
@@ -250,20 +252,20 @@ class SRNN(object):
         """ Returns functions to get current stacked-based (not RNN)
         classification scores. """
         batch_x = T.fmatrix('batch_x')
-        batch_p_y_given_x = T.fmatrix('batch_x')
+        batch_p_y = T.fmatrix('batch_p_y')
         batch_y = T.ivector('batch_y')
-        p_y_given_x_init = T.zeros((batch_x.shape[0], self.n_outs)) + 1./self.n_outs
+        p_y_init = T.zeros((batch_x.shape[0], self.n_outs)) + 1./self.n_outs  # TODO try = 0
 
         first_pass = theano.function(inputs=[theano.Param(batch_x)],
-            outputs=self.p_y_given_x,
+            outputs=self.p_y_out,
             givens={self.x: batch_x,
-                self.previous_p_y_given_x: p_y_given_x_init})
+                self.p_y_in: p_y_init})
 
         score = theano.function(inputs=[theano.Param(batch_x), 
-            theano.Param(batch_p_y_given_x), theano.Param(batch_y)],
+            theano.Param(batch_p_y), theano.Param(batch_y)],
                 outputs=self.errors,
                 givens={self.x: batch_x, 
-                    self.previous_p_y_given_x: batch_p_y_given_x,
+                    self.p_y_in: batch_p_y,
                     self.y: batch_y})
 
         # Create a function that scans the entire set given as input
@@ -347,9 +349,10 @@ def test_SRNN(finetune_lr=0.01, pretraining_epochs=0,
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
 
+    n_outs = len(set(train_set_y))
     dbn = SRNN(numpy_rng=numpy_rng, n_ins=N_FRAMES * N_FEATURES,
               relu_layers_sizes=[1024, 1024, 1024],
-              n_outs=len(set(train_set_y)))
+              n_outs=n_outs)
 
     # get the training, validation and testing function for the model
     print '... getting the finetuning functions'
@@ -366,7 +369,7 @@ def test_SRNN(finetune_lr=0.01, pretraining_epochs=0,
     improvement_threshold = 0.995  # a relative improvement of this much is
                                    # considered significant
 
-    best_validation_loss = numpy.inf
+    best_validation_error = numpy.inf
     test_score = 0.
     start_time = time.clock()
 
@@ -377,8 +380,16 @@ def test_SRNN(finetune_lr=0.01, pretraining_epochs=0,
         epoch = epoch + 1
         avg_costs = []
         for iteration, (x, y) in enumerate(train_set_iterator):
-            p_y_given_x = first_pass(x)
-            avg_cost = train_fn(x, p_y_given_x, y)
+            p_y_init = numpy.zeros((x.shape[0], n_outs), dtype='float32') + 1./n_outs  # TODO try = 0
+            if best_validation_error < 0.42:
+                # TODO normally wait for total convergence and redo the 
+                # training this way (because doing 2 trainings would not
+                # badly learn Ws and would reset Adadelta):
+                p_y = first_pass(x, p_y_init)
+                p_y /= p_y.sum()
+                avg_cost = train_fn(x, p_y, y)
+            else:
+                avg_cost = train_fn(x, p_y_init, y)
             avg_costs.append(avg_cost)
             #print('  epoch %i, sentence %i, '
             #'avg cost for this sentence %f' % \
@@ -388,27 +399,27 @@ def test_SRNN(finetune_lr=0.01, pretraining_epochs=0,
         print('  epoch %i, training error %f %%' % \
               (epoch, numpy.mean(train_scoref()) * 100.))
 
-        # we check the validation loss on every epoch
-        validation_losses = valid_scoref()
-        this_validation_loss = numpy.mean(validation_losses)  # TODO this is a mean of means (with different lengths)
+        # we check the validation error on every epoch
+        validation_errors = valid_scoref()
+        this_validation_error = numpy.mean(validation_errors)  # TODO this is a mean of means (with different lengths)
         print('  epoch %i, validation error %f %%' % \
-              (epoch, this_validation_loss * 100.))
+              (epoch, this_validation_error * 100.))
         # if we got the best validation score until now
-        if this_validation_loss < best_validation_loss:
+        if this_validation_error < best_validation_error:
             with open(output_file_name + '.pickle', 'w') as f:
                 cPickle.dump(dbn, f)
-            # improve patience if loss improvement is good enough
-            if (this_validation_loss < best_validation_loss *
+            # improve patience if error improvement is good enough
+            if (this_validation_error < best_validation_error *
                 improvement_threshold):
                 patience = max(patience, iteration * patience_increase)
             # save best validation score and iteration number
-            best_validation_loss = this_validation_loss
+            best_validation_error = this_validation_error
             # test it on the test set
-            test_losses = test_scoref()
-            test_score = numpy.mean(test_losses)  # TODO this is a mean of means (with different lengths)
+            test_errors = test_scoref()
+            test_error = numpy.mean(test_errors)  # TODO this is a mean of means (with different lengths)
             print(('  epoch %i, test error of '
                    'best model %f %%') %
-                  (epoch, test_score * 100.))
+                  (epoch, test_error * 100.))
         if patience <= iteration:  # TODO correct that
             done_looping = True
             break
@@ -416,7 +427,7 @@ def test_SRNN(finetune_lr=0.01, pretraining_epochs=0,
     end_time = time.clock()
     print(('Optimization complete with best validation score of %f %%, '
            'with test performance %f %%') %
-                 (best_validation_loss * 100., test_score * 100.))
+                 (best_validation_error * 100., test_score * 100.))
     print >> sys.stderr, ('The fine tuning code for file ' +
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
