@@ -25,7 +25,7 @@ if socket.gethostname() == "syhws-MacBook-Pro.local":
 N_FEATURES = 40  # filterbanks
 N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
-N_FRAMES_WINDOW = 1 # number of frames to offset self.p_y with self.x
+N_FRAMES_WINDOW = 3 # number of frames to offset self.p_y with self.x
 BORROW = True
 output_file_name = 'SRNN'
 
@@ -164,7 +164,6 @@ class SRNN(object):
         batch_x = T.fmatrix('batch_x')
         batch_p_y = T.fmatrix('batch_p_y')
         batch_y = T.ivector('batch_y')
-        #p_y_init = T.zeros((batch_x.shape[0], self.n_outs)) + 1./self.n_outs  # TODO try = 0
 
         first_pass = theano.function(inputs=[theano.Param(batch_x),
             theano.Param(batch_p_y)],
@@ -380,16 +379,21 @@ def test_SRNN(finetune_lr=0.01, pretraining_epochs=0,
         epoch = epoch + 1
         avg_costs = []
         for iteration, (x, y) in enumerate(train_set_iterator):
-            p_y_init = numpy.zeros((x.shape[0], n_outs), dtype='float32') + 1./n_outs  # TODO try = 0
-            if best_validation_error < 0.42:
+
+            if best_validation_error < 0.42:  # this is a hack:
                 # TODO normally wait for total convergence and redo the 
                 # training this way (because doing 2 trainings would not
                 # badly learn Ws and would reset Adadelta):
+                p_y_init = numpy.zeros((x.shape[0], n_outs), dtype='float32') + 1./n_outs
                 p_y = first_pass(x, p_y_init)
-                p_y /= p_y.sum()
+                if N_FRAMES_WINDOW > 0:
+                    p_y = numpy.concatenate([p_y_init[:N_FRAMES_WINDOW],
+                        p_y[:-N_FRAMES_WINDOW]])
                 avg_cost = train_fn(x, p_y, y)
             else:
+                p_y_init = numpy.zeros((x.shape[0], n_outs), dtype='float32')
                 avg_cost = train_fn(x, p_y_init, y)
+
             avg_costs.append(avg_cost)
             #print('  epoch %i, sentence %i, '
             #'avg cost for this sentence %f' % \
