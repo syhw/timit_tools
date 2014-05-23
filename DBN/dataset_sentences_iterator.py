@@ -2,23 +2,23 @@ MIN_FRAMES_PER_SENTENCE = 26
 import numpy
 from collections import defaultdict
 
+# TODO benchmark shared instead of numpy arrays.
+
+
 class DatasetSentencesIterator(object):
     """ An iterator on sentences of the dataset. """
 
     def __init__(self, x, y, phn_to_st, nframes=1):
         self._x = x
-        self._y = y
+        self._y = numpy.asarray(y)
         self._start_end = [[0]]
         self._nframes = nframes
         self._memoized_x = defaultdict(lambda: {})
         i = 0
-        for i, s in enumerate(y == phn_to_st['!ENTER[2]']):
+        for i, s in enumerate(self._y == phn_to_st['!ENTER[2]']):
             if s and i - self._start_end[-1][0] > MIN_FRAMES_PER_SENTENCE:
                 self._start_end[-1].append(i)
                 self._start_end.append([i])
-#            elif s:
-#                print "less than", MIN_FRAMES_PER_SENTENCE, "frames in",
-#                print self._start_end[-1][0], i
         self._start_end[-1].append(i+1)
 
     def _stackpad(self, start, end):
@@ -39,10 +39,22 @@ class DatasetSentencesIterator(object):
 
     def __iter__(self):
         for start, end in self._start_end:
-            #yield shared(self._x[start:end], borrow=BORROW), shared(self._y[start:end], borrow=BORROW)
             if self._nframes > 1:
-                #yield shared(self._stackpad(start, end)), shared(self._y[start:end])
                 yield self._stackpad(start, end), self._y[start:end]
             else:
                 yield self._x[start:end], self._y[start:end]
 
+
+class DatasetSentencesIteratorPhnSpkr(DatasetSentencesIterator):
+    """ An iterator on sentences of the dataset, specialized for datasets
+    with both phones and speakers in y labels. """
+    def __init__(self, x, y, phn_to_st, nframes=1):
+        super(DatasetSentencesIteratorPhnSpkr, self).__init__(x, y[0], phn_to_st, nframes)
+        self._y_spkr = numpy.asarray(y[1])
+
+    def __iter__(self):
+        for start, end in self._start_end:
+            if self._nframes > 1:
+                yield self._stackpad(start, end), self._y[start:end], self._y_spkr[start:end]
+            else:
+                yield self._x[start:end], self._y[start:end], self._y_spkr[start:end]

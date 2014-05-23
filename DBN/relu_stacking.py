@@ -14,6 +14,7 @@ from theano import shared
 
 from logistic_regression import LogisticRegression 
 from dataset_sentences_iterator import DatasetSentencesIterator
+from relu_layer import ReLU, StackReLU
 from prep_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
@@ -28,50 +29,6 @@ N_FRAMES = 13  # HAS TO BE AN ODD NUMBER
 N_FRAMES_WINDOW = 3 # number of frames to offset self.p_y with self.x
 BORROW = True
 output_file_name = 'SRNN'
-
-
-def relu_f(v):
-    # could do: T.switch(v > 0., v, 0 * v)
-    return v + abs(v) / 2.
-
-
-class ReLU(object):
-    def __init__(self, rng, input, n_in, n_out, W=None, b=None):
-        if W is None:
-            W_values = numpy.asarray(rng.uniform(
-                    low=-numpy.sqrt(6. / (n_in + n_out)),
-                    high=numpy.sqrt(6. / (n_in + n_out)),
-                    size=(n_in, n_out)), dtype=theano.config.floatX)
-            W_values *= 4  # TODO CHECK
-            W = theano.shared(value=W_values, name='W', borrow=True)
-        if b is None:
-            b_values = numpy.zeros((n_out,), dtype=theano.config.floatX)
-            b = theano.shared(value=b_values, name='b', borrow=True)
-        self.input = input
-        self.W = W
-        self.b = b
-        lin_output = T.dot(self.input, self.W) + self.b
-        self.output = relu_f(lin_output)
-        self.params = [self.W, self.b]
-
-
-class StackReLU(ReLU):
-    def __init__(self, rng, input, in_stack, n_in, n_in_stack, n_out,
-            W=None, Ws=None, b=None):
-        super(StackReLU, self).__init__(rng, input, n_in, n_out)
-        if Ws is None:
-            Ws_values = numpy.asarray(rng.uniform(
-                    low=-numpy.sqrt(6. / (n_in_stack + n_out)),
-                    high=numpy.sqrt(6. / (n_in_stack + n_out)),
-                    size=(n_in_stack, n_out)), dtype=theano.config.floatX)
-            Ws_values *= 4  # TODO CHECK
-            Ws = shared(value=Ws_values, name='Ws', borrow=True)
-        self.input_stack = in_stack
-        self.Ws = Ws  # weights of the reccurrent connection
-        lin_output = (T.dot(self.input, self.W) 
-                + T.dot(self.input_stack, self.Ws) + self.b)
-        self.output = relu_f(lin_output)
-        self.params = [self.W, self.b, self.Ws]  # order is important! W, b, Ws
 
 
 class SRNN(object):
@@ -296,7 +253,7 @@ class SRNN(object):
 
 
 def test_SRNN(finetune_lr=0.01, pretraining_epochs=0,
-             pretrain_lr=0.01, k=1, training_epochs=200, # TODO 100+
+             pretrain_lr=0.01, k=1, training_epochs=1000, # TODO 100+
              dataset=DATASET, batch_size=100):
     """
 
@@ -380,7 +337,8 @@ def test_SRNN(finetune_lr=0.01, pretraining_epochs=0,
         avg_costs = []
         for iteration, (x, y) in enumerate(train_set_iterator):
 
-            if best_validation_error < 0.42:  # this is a hack:
+            #if best_validation_error < 0.5:  # this is a hack:
+            if epoch > 1:  # this is a hack
                 # TODO normally wait for total convergence and redo the 
                 # training this way (because doing 2 trainings would not
                 # badly learn Ws and would reset Adadelta):

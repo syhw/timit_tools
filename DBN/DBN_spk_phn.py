@@ -6,7 +6,7 @@ import socket
 import random
 
 import numpy
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 
 import theano
 import theano.tensor as T
@@ -14,7 +14,7 @@ from theano.tensor.shared_randomstreams import RandomStreams
 from theano import shared
 
 from logistic_regression import LogisticRegression 
-from dataset_sentences_iterator import DatasetSentencesIterator
+from dataset_sentences_iterator import DatasetSentencesIteratorPhnSpkr
 from mlp import HiddenLayer
 from relu_rbm import RBM
 from relu_grbm import GRBM
@@ -31,7 +31,6 @@ N_FRAMES = 13  # HAS TO BE AN ODD NUMBER
                #(same number before and after center frame)
 PRELEARNING_RATE_DENOMINATOR_FOR_GAUSSIAN = 50. # we take a lower learning rate
                                              # for the Gaussian RBM
-MIN_FRAMES_PER_SENTENCE = 26
 BORROW = True
 output_file_name = 'dbn_spk_phn_13_frames'
 
@@ -401,12 +400,12 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     to_int = {}
     with open('timit_to_int_and_to_state_dicts_tuple.pickle') as f:  # TODO
         to_int, _ = cPickle.load(f)
-    train_set_iterator = DatasetSentencesIterator(train_set_x, train_set_y,
-            to_int, N_FRAMES)
-    valid_set_iterator = DatasetSentencesIterator(valid_set_x, valid_set_y,
-            to_int, N_FRAMES)
-    test_set_iterator = DatasetSentencesIterator(test_set_x, test_set_y,
-            to_int, N_FRAMES)
+    train_set_iterator = DatasetSentencesIteratorPhnSpkr(train_set_x,
+            train_set_y, to_int, N_FRAMES)
+    valid_set_iterator = DatasetSentencesIteratorPhnSpkr(valid_set_x,
+            valid_set_y, to_int, N_FRAMES)
+    test_set_iterator = DatasetSentencesIteratorPhnSpkr(test_set_x,
+            test_set_y, to_int, N_FRAMES)
 
     # numpy random generator
     numpy_rng = numpy.random.RandomState(123)
@@ -446,9 +445,8 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
         epoch = epoch + 1
         avg_costs_phn = []
         avg_costs_spkr = []
-        #for iteration, (x, y_phn, y_spkr) in enumerate(test_set_iterator):
         for iteration, (x, y_phn, y_spkr) in enumerate(train_set_iterator):
-            if random.random() > 0.8:
+            if random.random() > 0.8:  # TODO play with this ratio
                 avg_cost_phn = train_fn_phn(x, y_phn)
                 avg_costs_phn.append(avg_cost_phn)
             else:
