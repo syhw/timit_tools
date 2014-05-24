@@ -142,7 +142,7 @@ def process(folder,
                                  fs=srate,               # sampling rate
                                  frate=FBANKS_RATE,      # frame rate
                                  wlen=FBANKS_WINDOW,     # window length
-                                 nfft=512,               # length of dft
+                                 nfft=1024,              # length of dft
                                  mel_deltas=False,       # speed
                                  mel_deltasdeltas=False  # acceleration
                                  )
