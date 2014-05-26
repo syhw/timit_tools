@@ -1,73 +1,20 @@
 """
-This tutorial introduces logistic regression using Theano and stochastic
-gradient descent.
-
-Logistic regression is a probabilistic, linear classifier. It is parametrized
-by a weight matrix :math:`W` and a bias vector :math:`b`. Classification is
-done by projecting data points onto a set of hyperplanes, the distance to
-which is used to determine a class membership probability.
-
-Mathematically, this can be written as:
-
-.. math::
-  P(Y=i|x, W,b) &= softmax_i(W x + b) \\
-                &= \frac {e^{W_i x + b_i}} {\sum_j e^{W_j x + b_j}}
-
-
-The output of the model or prediction is then done by taking the argmax of
-the vector whose i'th element is P(Y=i|x).
-
-.. math::
-
-  y_{pred} = argmax_i P(Y=i|x,W,b)
-
-
-This tutorial presents a stochastic gradient descent optimization method
-suitable for large datasets, and a conjugate gradient optimization method
-that is suitable for smaller datasets.
-
-
-References:
-
-    - textbooks: "Pattern Recognition and Machine Learning" -
-                 Christopher M. Bishop, section 4.3.2
-
+FIXME TODO
 """
 __docformat__ = 'restructedtext en'
 
-import os
-import sys
-import time
-
 import numpy
-
 import theano
 import theano.tensor as T
 
-from prep_timit import load_data
-
 
 class LogisticRegression(object):
-    """Multi-class Logistic Regression Class
+    """Multi-class Logistic Regression
     """
 
-    def __init__(self, input, n_in, n_out, W=None, b=None):
-        """ Initialize the parameters of the logistic regression
-
-        :type input: theano.tensor.TensorType
-        :param input: symbolic variable that describes the input of the
-                      architecture (one minibatch)
-
-        :type n_in: int
-        :param n_in: number of input units, the dimension of the space in
-                     which the datapoints lie
-
-        :type n_out: int
-        :param n_out: number of output units, the dimension of the space in
-                      which the labels lie
-
-        """
-
+    def __init__(self, rng, input, n_in, n_out, W=None, b=None):
+        # rng is a required useless parameter so that we keep the same
+        # __init__ signature as for hidden layers (see layers.py)
         if W != None:
             self.W = W
         else:
@@ -87,6 +34,9 @@ class LogisticRegression(object):
         # compute prediction as class whose probability is maximal in
         # symbolic form
         self.y_pred = T.argmax(self.p_y_given_x, axis=1)
+
+        # for a standard theano Variable output attribute
+        self.output = self.y_pred
 
         # parameters of the model
         self.params = [self.W, self.b]
@@ -122,6 +72,10 @@ class LogisticRegression(object):
 
     def negative_log_likelihood_sum(self, y):
         return -T.sum(T.log(self.p_y_given_x)[T.arange(y.shape[0]), y])
+
+    def training_cost(self, y):
+        """ Wrapper for standard name """
+        return self.negative_log_likelihood_sum(y)
 
     def errors(self, y):
         """Return a float representing the number of errors in the minibatch

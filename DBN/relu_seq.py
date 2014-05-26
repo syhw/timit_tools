@@ -5,7 +5,7 @@ import time
 import socket
 
 import numpy
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 
 import theano
 import theano.tensor as T
@@ -13,8 +13,8 @@ from theano.tensor.shared_randomstreams import RandomStreams
 from theano import shared
 
 from logistic_regression import LogisticRegression 
-from dataset_sentences_iterator import DatasetSentencesIterator
-from relu_layer import ReLU, RecurrentReLU, DropoutReLU, dropout
+from dataset_iterators import DatasetSentencesIterator
+from layers import ReLU, RecurrentReLU, DropoutReLU, dropout
 from prep_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
@@ -23,8 +23,8 @@ from prep_timit import load_data
 DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
 if socket.gethostname() == "syhws-MacBook-Pro.local":
     DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
-N_FEATURES = 40  # filterbanks
-N_FRAMES = 21  # HAS TO BE AN ODD NUMBER 
+N_FEATURES = 39  # filterbanks
+N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
 IN_DROPOUT_RATE = 0.2
 DEBUG_ON_TEST_ONLY = False
@@ -102,7 +102,8 @@ class RRNN(object):
                         n_in=input_size,
                         n_out=relu_layers_sizes[i],
                         W=dropout_relu_layer.W * (1 - input_dropout_rate),
-                        b=dropout_relu_layer.b)
+                        b=dropout_relu_layer.b * (1 - input_dropout_rate))
+                        #b=dropout_relu_layer.b) TODO check
 
                 self.dropout_params.extend(dropout_relu_layer.params)
                 self.params.extend(relu_layer.params)
@@ -124,7 +125,8 @@ class RRNN(object):
             n_in=relu_layers_sizes[-1],
             n_out=n_outs,
             W=self.dropout_logLayer.W * (1 - self.dropout_relu_layers[-1].dropout_rate),
-            b=self.dropout_logLayer.b)
+            b=self.dropout_logLayer.b * (1 - self.dropout_relu_layers[-1].dropout_rate))
+            #b=self.dropout_logLayer.b) TODO check
         self.dropout_params.extend(self.dropout_logLayer.params)
         self.params.extend(self.logLayer.params)
         self._accugrads.extend([shared(value=numpy.zeros((relu_layers_sizes[-1], n_outs), dtype='float32'), name='accugrad_W', borrow=True), shared(value=numpy.zeros((n_outs, ), dtype='float32'), name='accugrad_b', borrow=True)])

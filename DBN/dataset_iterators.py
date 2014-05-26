@@ -8,7 +8,8 @@ from collections import defaultdict
 class DatasetSentencesIterator(object):
     """ An iterator on sentences of the dataset. """
 
-    def __init__(self, x, y, phn_to_st, nframes=1):
+    def __init__(self, x, y, phn_to_st, nframes=1, batch_size=None):
+        # batch_size is ignored
         self._x = x
         self._y = numpy.asarray(y)
         self._start_end = [[0]]
@@ -48,8 +49,8 @@ class DatasetSentencesIterator(object):
 class DatasetSentencesIteratorPhnSpkr(DatasetSentencesIterator):
     """ An iterator on sentences of the dataset, specialized for datasets
     with both phones and speakers in y labels. """
-    def __init__(self, x, y, phn_to_st, nframes=1):
-        super(DatasetSentencesIteratorPhnSpkr, self).__init__(x, y[0], phn_to_st, nframes)
+    def __init__(self, x, y, phn_to_st, nframes=1, batch_size=None):
+        super(DatasetSentencesIteratorPhnSpkr, self).__init__(x, y[0], phn_to_st, nframes, batch_size)
         self._y_spkr = numpy.asarray(y[1])
 
     def __iter__(self):
@@ -58,3 +59,9 @@ class DatasetSentencesIteratorPhnSpkr(DatasetSentencesIterator):
                 yield self._stackpad(start, end), self._y[start:end], self._y_spkr[start:end]
             else:
                 yield self._x[start:end], self._y[start:end], self._y_spkr[start:end]
+
+
+class DatasetBatchIterator(object):
+    def __init__(self, x, y, phn_to_st, nframes=1, batch_size=None):
+        pass
+        # TODO

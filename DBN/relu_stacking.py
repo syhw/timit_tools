@@ -14,7 +14,7 @@ from theano import shared
 
 from logistic_regression import LogisticRegression 
 from dataset_sentences_iterator import DatasetSentencesIterator
-from relu_layer import ReLU, StackReLU
+from layers import ReLU, StackReLU
 from prep_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'

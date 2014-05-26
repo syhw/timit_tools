@@ -13,8 +13,8 @@ from theano.tensor.shared_randomstreams import RandomStreams
 from theano import shared
 
 from logistic_regression import LogisticRegression 
-from dataset_sentences_iterator import DatasetSentencesIterator
-from relu_layer import ReLU, RecurrentReLU
+from dataset_iterators import DatasetSentencesIterator
+from layers import ReLU, RecurrentReLU
 from prep_timit import load_data
 
 #DATASET = '/home/gsynnaeve/datasets/TIMIT'
@@ -24,7 +24,7 @@ DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
 if socket.gethostname() == "syhws-MacBook-Pro.local":
     DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
 N_FEATURES = 40  # filterbanks
-N_FRAMES = 21  # HAS TO BE AN ODD NUMBER 
+N_FRAMES = 13  # HAS TO BE AN ODD NUMBER 
                #(same number before and after center frame)
 DEBUG_ON_TEST_ONLY = False
 output_file_name = 'RRNN'
@@ -262,7 +262,7 @@ def test_RRNN(finetune_lr=0.0001, pretraining_epochs=0,
     print '... building the model'
 
     nnet = RRNN(numpy_rng=numpy_rng, n_ins=N_FRAMES * N_FEATURES,
-              relu_layers_sizes=[2400, 2400, 2400, 2400, 2400, 2400],
+              relu_layers_sizes=[2400, 2400, 2400, 2400],
               recurrent_connections=[],
               n_outs=len(set(train_set_y)))
 
