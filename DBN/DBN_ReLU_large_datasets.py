@@ -422,9 +422,14 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     """
 
     print "loading dataset from", dataset
+    features = 'MFCC'
+    if features == 'MFCC':
+        N_FEATURES = 39
+    elif features == 'fbank':
+        N_FEATURES = 40
     #datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='normalize', cv_frac=0.2, speakers=False, numpy_array_only=True) 
     #datasets = load_data(dataset, nframes=N_FRAMES, features='fbank', scaling='student', cv_frac='fixed', speakers=False, numpy_array_only=True) 
-    datasets = load_data(dataset, nframes=1, features='fbank', scaling='student', cv_frac='fixed', speakers=False, numpy_array_only=True) 
+    datasets = load_data(dataset, nframes=1, features=features, scaling='student', cv_frac='fixed', speakers=False, numpy_array_only=True) 
     #datasets = load_data(dataset, nframes=1, features='fbank', scaling='student', cv_frac=0.2, speakers=False, numpy_array_only=True) 
 
     train_set_x, train_set_y = datasets[0]  # if speakers, do test/test/test

@@ -1,7 +1,7 @@
 """Runs deep learning experiments on speech dataset.
 
 Usage:
-    run_exp.py [--dataset=path] [--dataset-name=timit] [--iterator-type=sentences] [--batch-size=100] [--nframes=13] [--features=fbank] [--init-lr=0.0001] [--epochs=500] [--network-type=dropout_RRNN] [--trainer-type=adadelta] [--prefix-output-fname=my_prefix_42] [--debug-test]     
+    run_exp.py [--dataset=path] [--dataset-name=timit] [--iterator-type=sentences] [--batch-size=100] [--nframes=13] [--features=fbank] [--init-lr=0.0001] [--epochs=500] [--network-type=dropout_XXX] [--trainer-type=adadelta] [--prefix-output-fname=my_prefix_42] [--debug-test]     
 
 
 Options:
@@ -23,8 +23,8 @@ Options:
     default is 0.0001
     --epochs=int                Max number of epochs (always early stopping)
     default is 500
-    --network-type=str         "dropout_RRNN" | "RRNN"
-    default is "dropout_RRNN"
+    --network-type=str         "dropout_XXX" | "XXX"
+    default is "dropout_XXX"
     --trainer-type=str         "SGD" | "adagrad" | "adadelta"
     default is "adadelta"
     --prefix-output-fname=str  An additional prefix to the output file name
@@ -34,13 +34,14 @@ Options:
 
 """
 
-import socket, docopt, cPickle, time
+import socket, docopt, cPickle, time, sys, os
 import numpy
 
 from prep_timit import load_data
-
 from dataset_iterators import DatasetSentencesIterator, DatasetBatchIterator
-#from nnet_archs TODO
+from layers import Linear, ReLU, dropout
+from classifiers import LogisticRegression
+from nnet_archs import NeuralNet, DropoutNet
 
 DEFAULT_DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
 if socket.gethostname() == "syhws-MacBook-Pro.local":
@@ -53,8 +54,10 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
         iterator_type=DatasetSentencesIterator, batch_size=100,
         nframes=13, features="fbank",
         init_lr=0.0001, max_epochs=500, 
-        network_type="dropout_RRNN", trainer_type="adadelta",
+        network_type="dropout_XXX", trainer_type="adadelta",
+        layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
         layers_sizes=[2400, 2400, 2400, 2400],
+        dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],
         recurrent_connections=[],
         prefix_fname='',
         debug_on_test_only=False):
@@ -69,7 +72,7 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
     output_file_name += "_" + network_type + "_" + trainer_type
     print "output file name:", output_file_name
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes=1, features='fbank', scaling='normalize', cv_frac='fixed', speakers=False, numpy_array_only=True) 
+    datasets = load_data(dataset, nframes=1, features=features, scaling='normalize', cv_frac='fixed', speakers=False, numpy_array_only=True) 
 
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1]
@@ -101,16 +104,21 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
     numpy_rng = numpy.random.RandomState(123)
     print '... building the model'
 
-    RRNN = None
     # TODO the proper network type other than just dropout or not
-    if "dropout" == network_type:
-        from relu_seq import RRNN
+    nnet = None
+    if "dropout" in network_type:
+        nnet = DropoutNet(numpy_rng=numpy_rng, 
+                n_ins=test_set_x.shape[1]*nframes,
+                layers_types=layers_types,
+                layers_sizes=layers_sizes,
+                dropout_rates=dropout_rates,
+                n_outs=len(set(train_set_y)))
     else:
-        from relu_seq_wo_dropout import RRNN
-    nnet = RRNN(numpy_rng=numpy_rng, n_ins=test_set_x.shape[1]*nframes,
-              relu_layers_sizes=layers_sizes,
-              recurrent_connections=recurrent_connections,
-              n_outs=len(set(train_set_y)))
+        nnet = NeuralNet(numpy_rng=numpy_rng, 
+                n_ins=test_set_x.shape[1]*nframes,
+                layers_types=layers_types,
+                layers_sizes=layers_sizes,
+                n_outs=len(set(train_set_y)))
 
     # get the training, validation and testing function for the model
     print '... getting the training functions'
@@ -232,7 +240,7 @@ if __name__=='__main__':
     max_epochs = 500
     if arguments['--epochs'] != None:
         max_epochs = int(arguments['--epochs'])
-    network_type = 'dropout_RRNN'
+    network_type = 'dropout_XXX'
     if arguments['--network-type'] != None:
         network_type = arguments['--network-type']
     trainer_type = 'adadelta'
@@ -250,7 +258,12 @@ if __name__=='__main__':
         nframes=nframes, features=features,
         init_lr=init_lr, max_epochs=max_epochs, 
         network_type=network_type, trainer_type=trainer_type,
-        layers_sizes=[2400, 2400, 2400, 2400],  # TODO in opts
+        #layers_types=[Linear, ReLU, ReLU, LogisticRegression],
+        #layers_sizes=[1000, 1000, 1000],  # TODO in opts
+        #dropout_rates=[0.2, 0.5, 0.5, 0.5],  # TODO in opts
+        layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
+        layers_sizes=[3000, 3000, 3000, 3000],  # TODO in opts
+        dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],  # TODO in opts
         recurrent_connections=[],  # TODO in opts
         prefix_fname=prefix_fname,
         debug_on_test_only=debug_on_test_only)
