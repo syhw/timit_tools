@@ -287,9 +287,10 @@ if __name__=='__main__':
         #layers_types=[Linear, ReLU, ReLU, LogisticRegression],
         #layers_types=[ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[1024, 1024, 1024],  # TODO in opts
-        #dropout_rates=[0.2, 0.2, 0.2, 0.2],  # TODO in opts
-        layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
-        layers_sizes=[3000, 3000, 3000, 3000],  # TODO in opts
+        #dropout_rates=[0.2, 0.3, 0.4, 0.5],  # TODO in opts
+        #layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
+        layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
+        layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts
         dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],  # TODO in opts
         recurrent_connections=[],  # TODO in opts
         prefix_fname=prefix_fname,

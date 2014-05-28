@@ -30,7 +30,7 @@ def do_dtw(word, x, y):
     return word, x, y, dtw[0], dtw[-1][0]
 
 
-def match_words(d, min_len_word_char=3, omit_words=['the'], before_after=3,
+def match_words(d, min_len_word_char=4, omit_words=['the'], before_after=3,
         serial=False):
     """ Matches same words, extracts their filterbanks, performs DTW, returns
     a list of tuples:
@@ -93,5 +93,5 @@ if __name__ == '__main__':
     if folder != ".":
         output_name += "_" + folder.split('/')[-1]
     joblib.dump(match_words(find_words(folder)), output_name + ".joblib",
-            compress=0, cache_size=512)
-    # compress doesn't work for big datasets!
+            compress=4, cache_size=512)
+    # compress doesn't work for too big datasets!
