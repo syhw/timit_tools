@@ -1,7 +1,12 @@
 """Runs deep learning experiments on speech dataset.
 
 Usage:
-    run_exp.py [--dataset=path] [--dataset-name=timit] [--iterator-type=sentences] [--batch-size=100] [--nframes=13] [--features=fbank] [--init-lr=0.0001] [--epochs=500] [--network-type=dropout_XXX] [--trainer-type=adadelta] [--prefix-output-fname=my_prefix_42] [--debug-test]     
+    run_exp.py [--dataset=path] [--dataset-name=timit] 
+    [--iterator-type=sentences] [--batch-size=100] [--nframes=13] 
+    [--features=fbank] [--init-lr=0.001] [--epochs=500] 
+    [--network-type=dropout_XXX] [--trainer-type=adadelta] 
+    [--prefix-output-fname=my_prefix_42] [--debug-test] [--debug-print] 
+    [--debug-time]
 
 
 Options:
@@ -20,7 +25,7 @@ Options:
     --features=str              "fbank" | "MFCC" (some others are not tested)
     default is "fbank"
     --init-lr=float             Initial learning rate for SGD
-    default is 0.0001
+    default is 0.001 (that is very low intentionally)
     --epochs=int                Max number of epochs (always early stopping)
     default is 500
     --network-type=str         "dropout_XXX" | "XXX"
@@ -31,6 +36,11 @@ Options:
     default is "" (empty string)
     --debug-test               Flag that activates training on the test set
     default is False, using it makes it True
+    --debug-print              Flag that activates printing the symbolic expr.
+                               computed by the network
+    default is False, using it makes it True
+    --debug-time               Flag that activates timing epoch duration
+    default is False, using it makes it True
 
 """
 
@@ -39,7 +49,7 @@ import numpy
 
 from prep_timit import load_data
 from dataset_iterators import DatasetSentencesIterator, DatasetBatchIterator
-from layers import Linear, ReLU, dropout
+from layers import Linear, ReLU 
 from classifiers import LogisticRegression
 from nnet_archs import NeuralNet, DropoutNet
 
@@ -53,14 +63,16 @@ elif socket.gethostname() == "TODO":  # TODO
 def run(dataset=DEFAULT_DATASET, dataset_name='timit',
         iterator_type=DatasetSentencesIterator, batch_size=100,
         nframes=13, features="fbank",
-        init_lr=0.0001, max_epochs=500, 
+        init_lr=0.001, max_epochs=500, 
         network_type="dropout_XXX", trainer_type="adadelta",
         layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
         layers_sizes=[2400, 2400, 2400, 2400],
         dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],
         recurrent_connections=[],
         prefix_fname='',
-        debug_on_test_only=False):
+        debug_on_test_only=False,
+        debug_print=False,
+        debug_time=False):
     """
     FIXME TODO
     """
@@ -112,16 +124,19 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
                 layers_types=layers_types,
                 layers_sizes=layers_sizes,
                 dropout_rates=dropout_rates,
-                n_outs=len(set(train_set_y)))
+                n_outs=len(set(train_set_y)),
+                debugprint=debug_print)
     else:
         nnet = NeuralNet(numpy_rng=numpy_rng, 
                 n_ins=test_set_x.shape[1]*nframes,
                 layers_types=layers_types,
                 layers_sizes=layers_sizes,
-                n_outs=len(set(train_set_y)))
+                n_outs=len(set(train_set_y)),
+                debugprint=debug_print)
 
     # get the training, validation and testing function for the model
     print '... getting the training functions'
+    print trainer_type
     train_fn = None
     if trainer_type == "adadelta":
         train_fn = nnet.get_adadelta_trainer()
@@ -154,10 +169,13 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
     done_looping = False
     epoch = 0
     lr = init_lr
+    timer = None
 
     while (epoch < max_epochs) and (not done_looping):
         epoch = epoch + 1
         avg_costs = []
+        if debug_time:
+            timer = time.time()
         for iteration, (x, y) in enumerate(data_iterator):
             avg_cost = 0.
             if "ada" in trainer_type:
@@ -165,6 +183,8 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
             else:
                 avg_cost = train_fn(x, y, lr)
             avg_costs.append(avg_cost)
+        if debug_time:
+            print('  epoch %i took %f seconds' % (epoch, time.time() - timer))
         print('  epoch %i, avg costs %f' % \
               (epoch, numpy.mean(avg_costs)))
         print('  epoch %i, training error %f %%' % \
@@ -234,7 +254,7 @@ if __name__=='__main__':
     features = 'fbank'
     if arguments['--features'] != None:
         features = arguments['--features']
-    init_lr = 0.0001
+    init_lr = 0.001
     if arguments['--init-lr'] != None:
         init_lr = float(arguments['--init-lr'])
     max_epochs = 500
@@ -252,6 +272,12 @@ if __name__=='__main__':
     debug_on_test_only = False
     if arguments['--debug-test']:
         debug_on_test_only = True
+    debug_print = False
+    if arguments['--debug-print']:
+        debug_print = True
+    debug_time = False
+    if arguments['--debug-time']:
+        debug_time = True
 
     run(dataset=dataset, dataset_name=dataset_name,
         iterator_type=iterator_type, batch_size=batch_size,
@@ -259,11 +285,14 @@ if __name__=='__main__':
         init_lr=init_lr, max_epochs=max_epochs, 
         network_type=network_type, trainer_type=trainer_type,
         #layers_types=[Linear, ReLU, ReLU, LogisticRegression],
-        #layers_sizes=[1000, 1000, 1000],  # TODO in opts
-        #dropout_rates=[0.2, 0.5, 0.5, 0.5],  # TODO in opts
+        #layers_types=[ReLU, ReLU, ReLU, LogisticRegression],
+        #layers_sizes=[1024, 1024, 1024],  # TODO in opts
+        #dropout_rates=[0.2, 0.2, 0.2, 0.2],  # TODO in opts
         layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
         layers_sizes=[3000, 3000, 3000, 3000],  # TODO in opts
         dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],  # TODO in opts
         recurrent_connections=[],  # TODO in opts
         prefix_fname=prefix_fname,
-        debug_on_test_only=debug_on_test_only)
+        debug_on_test_only=debug_on_test_only,
+        debug_print=debug_print,
+        debug_time=debug_time)

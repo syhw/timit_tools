@@ -422,7 +422,7 @@ def test_DBN(finetune_lr=0.01, pretraining_epochs=0,
     """
 
     print "loading dataset from", dataset
-    features = 'MFCC'
+    features = 'fbank'
     if features == 'MFCC':
         N_FEATURES = 39
     elif features == 'fbank':

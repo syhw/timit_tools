@@ -19,8 +19,8 @@ class NeuralNet(object):
             layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
             layers_sizes=[1024, 1024, 1024, 1024],
             n_outs=62 * 3,
-            rho=0.9, eps=1.E-6,
-            debugprint=True):
+            rho=0.8, eps=1.5E-7,  # TODO refine
+            debugprint=False):
         self.layers = []
         self.params = []
         self.n_layers = len(layers_sizes)
@@ -70,7 +70,8 @@ class NeuralNet(object):
         batch_y = T.ivector('batch_y')
         learning_rate = T.fscalar('lr')  # learning rate to use
         # compute the gradients with respect to the model parameters
-        gparams = T.grad(self.cost, self.params)
+        # using mean_cost so that the learning rate is not too dependent on the batch size
+        gparams = T.grad(self.mean_cost, self.params)
 
         # compute list of weights updates
         updates = OrderedDict()
@@ -80,7 +81,7 @@ class NeuralNet(object):
         train_fn = theano.function(inputs=[theano.Param(batch_x), 
             theano.Param(batch_y),
             theano.Param(learning_rate)],
-            outputs=self.cost,
+            outputs=self.mean_cost,
             updates=updates,
             givens={self.x: batch_x, self.y: batch_y})
 
@@ -164,7 +165,7 @@ class DropoutNet(NeuralNet):
             layers_sizes=[1024, 1024, 1024, 1024],
             dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],
             n_outs=62 * 3,
-            rho=0.9, eps=1.E-6,
+            rho=0.8, eps=1.5E-7,  # TODO refine
             debugprint=False):
         super(DropoutNet, self).__init__(numpy_rng, theano_rng, n_ins,
                 layers_types, layers_sizes, n_outs, rho, eps, debugprint)
@@ -174,11 +175,12 @@ class DropoutNet(NeuralNet):
 
         for layer, layer_type, n_in, n_out, dr in zip(self.layers,
                 layers_types, self.layers_ins, self.layers_outs,
-                dropout_rates[1:] + [1.]):  # this + [1.] is a hack
+                dropout_rates[1:] + [0]):  # !!! we do not dropout anything 
+                                            # from the last layer !!!
             this_layer = layer_type(rng=numpy_rng,
                     input=dropout_layer_input, n_in=n_in, n_out=n_out,
-                    W=layer.W * 1./dr, # experimental
-                    b=layer.b * 1./dr) # TODO check
+                    W=layer.W * 1. / (1. - dr), # experimental
+                    b=layer.b * 1. / (1. - dr)) # TODO check
             assert hasattr(this_layer, 'output')
             # N.B. dropout with dr=1 does not dropanything!!
             this_layer.output = dropout(numpy_rng, this_layer.output, dr)

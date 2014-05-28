@@ -13,6 +13,7 @@ from theano import shared
 def relu_f(v):
     """ Wrapper to quickly change the rectified linear unit function """
     # could do: T.switch(v > 0., v, 0 * v), quick benchmark is:
+    # ==========
     # In [ ]: x = shared(np.asarray(np.random.random((1000, 1000)) ,dtype='float32'))
     # In [ ]: def relu_abs(v):
     #         return (v + abs(v))/2.
@@ -26,6 +27,9 @@ def relu_f(v):
     # 10 loops, best of 3: 86.5 ms per loop
     # In [ ]: %timeit T.grad(T.sum(relu_abs(x)), x)
     # 10 loops, best of 3: 71.8 ms per loop
+    # ==========
+    # in practice, epochs using "(v+abs(v))/2." are ~2.5 times faster than
+    # epochs using T.switch (for a network with 4 layers of ReLU)
     return (v + abs(v)) / 2.
 
 
@@ -33,8 +37,10 @@ def dropout(rng, x, p=0.5):
     if p > 0. and p < 1.:
         seed = rng.randint(2 ** 30)
         srng = theano.tensor.shared_randomstreams.RandomStreams(seed)
-        mask = srng.binomial(n=1, p=1.-p, size=x.shape)
-        return x * T.cast(mask, theano.config.floatX)
+        mask = srng.binomial(n=1, p=1.-p, size=x.shape, dtype=theano.config.floatX)
+        return x * mask
+    else:
+        print "NOT DROPPING"  # TODO remove
     return x
 
 
@@ -72,7 +78,7 @@ class SigmoidLayer(Linear):
 class ReLU(Linear):
     def __init__(self, rng, input, n_in, n_out, W=None, b=None):
         if b == None:
-            b_values = numpy.ones((n_out,), dtype=theano.config.floatX) # TODO check
+            b_values = numpy.zeros((n_out,), dtype=theano.config.floatX)
             b = theano.shared(value=b_values, name='b', borrow=True)
         super(ReLU, self).__init__(rng, input, n_in, n_out, W, b)
         self.output = relu_f(self.output)
