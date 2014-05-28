@@ -1,4 +1,4 @@
-import os, sys, cPickle
+import os, sys, joblib
 from collections import defaultdict
 import numpy as np
 from dtw import DTW
@@ -25,7 +25,13 @@ def find_words(folder):
     return words
 
 
-def match_words(d, min_len_word_char=3, omit_words=['the'], before_after=3):
+def do_dtw(word, x, y):
+    dtw = DTW(x, y, return_alignment=1)
+    return word, x, y, dtw[0], dtw[-1][0]
+
+
+def match_words(d, min_len_word_char=3, omit_words=['the'], before_after=3,
+        serial=False):
     """ Matches same words, extracts their filterbanks, performs DTW, returns
     a list of tuples:
     [(word_label, fbanks1, fbanks2, DTW_cost, DTW_alignment)]
@@ -37,6 +43,7 @@ def match_words(d, min_len_word_char=3, omit_words=['the'], before_after=3):
       - omit_words: ([str]) (list of strings), words to omit / not align.
       - before_after: (int) number of frames to take before and after (if
         possible) the start and the end of the word.
+      - serial: (bool) good ol' Python on one core if True, joblibed otherwise
     """
     
     #print d
@@ -60,14 +67,20 @@ def match_words(d, min_len_word_char=3, omit_words=['the'], before_after=3):
             #new_word_end = TODO
             words_feats[word].append(fb[before:after])
     res = []
-    for word, l in words_feats.iteritems():
-        print word
-        for i, x in enumerate(l):
-            for j, y in enumerate(l):
-                if i == j:
-                    continue
-                dtw = DTW(x, y, return_alignment=1)
-                res.append((word, x, y, dtw[0], dtw[-1][0]))
+    if serial:
+        for word, l in words_feats.iteritems():
+            print word
+            for i, x in enumerate(l):
+                for j, y in enumerate(l):
+                    if i >= j:  # that's symmetric!
+                        continue
+                    res.append(do_dtw(word, x, y))
+    else:
+        res = joblib.Parallel(n_jobs=20)(joblib.delayed(do_dtw)(word, l[i], y)
+                    for word, l in words_feats.iteritems()
+                        for i, x in enumerate(l)
+                            for j, y in enumerate(l)
+                                if i < j)
     return res
 
 
@@ -75,9 +88,10 @@ if __name__ == '__main__':
     folder = '.'
     if len(sys.argv) > 1:
         folder = sys.argv[1].rstrip('/')
-    print "", folder
+    print "working on folder:", folder
     output_name = "dtw_words"
     if folder != ".":
         output_name += "_" + folder.split('/')[-1]
-    with open(output_name + ".pickle", "wb") as wf:
-        cPickle.dump(match_words(find_words(folder)), wf)
+    joblib.dump(match_words(find_words(folder)), output_name + ".joblib",
+            compress=0, cache_size=512)
+    # compress doesn't work for big datasets!
