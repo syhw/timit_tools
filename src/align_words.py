@@ -25,23 +25,25 @@ def find_words(folder):
     return words
 
 
-def match_words(d, min_len_word_char=4, before_after=3):
+def match_words(d, min_len_word_char=3, omit_words=['the'], before_after=3):
     """ Matches same words, extracts their filterbanks, performs DTW, returns
     a list of tuples:
-    [(fbanks1, fbanks2, word1_start, word2_start, DTW_alignment)]
+    [(word_label, fbanks1, fbanks2, DTW_cost, DTW_alignment)]
 
     Parameters:
       - d: a dictionary of word->files (output of find_words(folder))
       - min_len_word_char: (int) minimum length for the words to consider
-        (in characters)
+        (in characters).
+      - omit_words: ([str]) (list of strings), words to omit / not align.
       - before_after: (int) number of frames to take before and after (if
         possible) the start and the end of the word.
     """
     
-    print d
+    #print d
+    print "features rate (number of features vector per second)", FBANKS_RATE
     words_feats = defaultdict(lambda: [])
     for word, l in d.iteritems():
-        if len(word) < min_len_word_char: 
+        if len(word) < min_len_word_char or word in omit_words: 
             continue
         for fname, s, e in l:
             sf = s * FBANKS_RATE
@@ -52,8 +54,8 @@ def match_words(d, min_len_word_char=4, before_after=3):
             if fb == None:
                 print >> sys.stderr, "problem with file", fname
                 continue 
-            before = min(0, sf - before_after)
-            after = max(ef + before_after, fb.shape[0])
+            before = max(0, sf - before_after)
+            after = min(ef + before_after, fb.shape[0])
             #new_word_start = TODO
             #new_word_end = TODO
             words_feats[word].append(fb[before:after])
@@ -64,14 +66,18 @@ def match_words(d, min_len_word_char=4, before_after=3):
             for j, y in enumerate(l):
                 if i == j:
                     continue
-                res.append((x, y, DTW(x, y, return_alignment=1)[-1]))
+                dtw = DTW(x, y, return_alignment=1)
+                res.append((word, x, y, dtw[0], dtw[-1][0]))
     return res
 
 
 if __name__ == '__main__':
     folder = '.'
     if len(sys.argv) > 1:
-        folder = sys.argv[1]
+        folder = sys.argv[1].rstrip('/')
     print "", folder
-    with open("dtw_words.pickle", "wb") as wf:
+    output_name = "dtw_words"
+    if folder != ".":
+        output_name += "_" + folder.split('/')[-1]
+    with open(output_name + ".pickle", "wb") as wf:
         cPickle.dump(match_words(find_words(folder)), wf)
