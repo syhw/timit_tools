@@ -16,7 +16,7 @@ Options:
     default is timit
     --dataset-name=str          Name of the dataset (for outputs/saves)
     default is "timit"
-    --iterator-type=str         "sentences" | "batch"
+    --iterator-type=str         "sentences" | "batch" | "dtw"
     default is "sentences"
     --batch-size=int            Batch size, used only by the batch iterator
     default is 100 (unused for "sentences" iterator type)
@@ -28,7 +28,7 @@ Options:
     default is 0.001 (that is very low intentionally)
     --epochs=int                Max number of epochs (always early stopping)
     default is 500
-    --network-type=str         "dropout_XXX" | "XXX"
+    --network-type=str         "dropout*" | "*" | "*ab_net*"
     default is "dropout_XXX"
     --trainer-type=str         "SGD" | "adagrad" | "adadelta"
     default is "adadelta"
@@ -49,9 +49,10 @@ import numpy
 
 from prep_timit import load_data
 from dataset_iterators import DatasetSentencesIterator, DatasetBatchIterator
+from dataset_iterators import DatasetDTWIterator
 from layers import Linear, ReLU 
 from classifiers import LogisticRegression
-from nnet_archs import NeuralNet, DropoutNet
+from nnet_archs import NeuralNet, DropoutNet, ABNeuralNet
 
 DEFAULT_DATASET = '/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split'
 if socket.gethostname() == "syhws-MacBook-Pro.local":
@@ -83,34 +84,79 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
     output_file_name += "_" + features + str(nframes)
     output_file_name += "_" + network_type + "_" + trainer_type
     print "output file name:", output_file_name
+
+    n_ins = None
+    n_outs = None
     print "loading dataset from", dataset
-    datasets = load_data(dataset, nframes=1, features=features, scaling='normalize', cv_frac='fixed', speakers=False, numpy_array_only=True) 
+     # TODO DO A FUNCTION
+    if dataset[-7:] == '.joblib':
+        # TODO
+        import joblib
+        datasets = joblib.load(dataset)
+        from random import shuffle
+        #datasets = [(word_label, fbanks1, fbanks2, DTW_cost, DTW_1to2, DTW_2to1)]
+        all_the_data = numpy.r_[numpy.concatenate([e[1] for e in datasets]),
+            numpy.concatenate([e[2] for e in datasets])]
+        mean = numpy.mean(all_the_data, 0)
+        std = numpy.std(all_the_data, 0)
+        data = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
+                for e in datasets]
+        shuffle(data)
+        x1, x2 = zip(*data)
+        y = [1 for _ in xrange(len(data))]
+        assert x1[0].shape[0] == x2[0].shape[0]
+        assert x1[0].shape[1] == x2[0].shape[1]
+        assert len(x1) == len(x2)
+        assert len(x1) == len(y)
+        ten_percent = int(0.1 * len(data))
 
-    train_set_x, train_set_y = datasets[0]
-    valid_set_x, valid_set_y = datasets[1]
-    test_set_x, test_set_y = datasets[2]
-    assert train_set_x.shape[1] == valid_set_x.shape[1]
-    assert test_set_x.shape[1] == valid_set_x.shape[1]
+        n_ins = x1[0].shape[1] * nframes
+        n_outs = 50
 
-    print "dataset loaded!"
-    print "train set size", train_set_x.shape[0]
-    print "validation set size", valid_set_x.shape[0]
-    print "test set size", test_set_x.shape[0]
-    print "phones in train", len(set(train_set_y))
-    print "phones in valid", len(set(valid_set_y))
-    print "phones in test", len(set(test_set_y))
+        # TODO
+        print "nframes:", nframes
+        train_set_iterator = iterator_type(x1[:-ten_percent], 
+                x2[:-ten_percent], y[:-ten_percent], # TODO
+                nframes=nframes, batch_size=batch_size, margin=True)
+        valid_set_iterator = iterator_type(x1[-ten_percent:], 
+                x2[-ten_percent:], y[-ten_percent:],  # TODO
+                nframes=nframes, batch_size=batch_size, margin=True)
+        test_set_iterator = iterator_type(x1[-ten_percent:], 
+                x2[-ten_percent:], y[-ten_percent:], # TODO
+                nframes=nframes, batch_size=batch_size, margin=True)
+    else:
+        datasets = load_data(dataset, nframes=1, features=features, scaling='normalize', cv_frac='fixed', speakers=False, numpy_array_only=True) 
 
-    to_int = {}
-    with open(dataset_name + '_to_int_and_to_state_dicts_tuple.pickle') as f:
-        to_int, _ = cPickle.load(f)
+        train_set_x, train_set_y = datasets[0]
+        valid_set_x, valid_set_y = datasets[1]
+        test_set_x, test_set_y = datasets[2]
+        assert train_set_x.shape[1] == valid_set_x.shape[1]
+        assert test_set_x.shape[1] == valid_set_x.shape[1]
 
-    print "nframes:", nframes
-    train_set_iterator = iterator_type(train_set_x, train_set_y,
-            to_int, nframes=nframes, batch_size=batch_size)
-    valid_set_iterator = iterator_type(valid_set_x, valid_set_y,
-            to_int, nframes=nframes, batch_size=batch_size)
-    test_set_iterator = iterator_type(test_set_x, test_set_y,
-            to_int, nframes=nframes, batch_size=batch_size)
+        print "dataset loaded!"
+        print "train set size", train_set_x.shape[0]
+        print "validation set size", valid_set_x.shape[0]
+        print "test set size", test_set_x.shape[0]
+        print "phones in train", len(set(train_set_y))
+        print "phones in valid", len(set(valid_set_y))
+        print "phones in test", len(set(test_set_y))
+        n_outs = len(set(train_set_y))
+
+        to_int = {}
+        with open(dataset_name + '_to_int_and_to_state_dicts_tuple.pickle') as f:
+            to_int, _ = cPickle.load(f)
+
+        print "nframes:", nframes
+        train_set_iterator = iterator_type(train_set_x, train_set_y,
+                to_int, nframes=nframes, batch_size=batch_size)
+        valid_set_iterator = iterator_type(valid_set_x, valid_set_y,
+                to_int, nframes=nframes, batch_size=batch_size)
+        test_set_iterator = iterator_type(test_set_x, test_set_y,
+                to_int, nframes=nframes, batch_size=batch_size)
+        n_ins = test_set_x.shape[1]*nframes
+
+    assert n_ins != None
+    assert n_outs != None
 
     # numpy random generator
     numpy_rng = numpy.random.RandomState(123)
@@ -120,18 +166,25 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
     nnet = None
     if "dropout" in network_type:
         nnet = DropoutNet(numpy_rng=numpy_rng, 
-                n_ins=test_set_x.shape[1]*nframes,
+                n_ins=n_ins,
                 layers_types=layers_types,
                 layers_sizes=layers_sizes,
                 dropout_rates=dropout_rates,
-                n_outs=len(set(train_set_y)),
+                n_outs=n_outs,
+                debugprint=debug_print)
+    elif "ab_net" in network_type:
+        nnet = ABNeuralNet(numpy_rng=numpy_rng, 
+                n_ins=n_ins,
+                layers_types=layers_types,
+                layers_sizes=layers_sizes,
+                n_outs=n_outs,
                 debugprint=debug_print)
     else:
         nnet = NeuralNet(numpy_rng=numpy_rng, 
-                n_ins=test_set_x.shape[1]*nframes,
+                n_ins=n_ins,
                 layers_types=layers_types,
                 layers_sizes=layers_sizes,
-                n_outs=len(set(train_set_y)),
+                n_outs=n_outs,
                 debugprint=debug_print)
 
     # get the training, validation and testing function for the model
@@ -178,7 +231,8 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
             timer = time.time()
         for iteration, (x, y) in enumerate(data_iterator):
             avg_cost = 0.
-            if "ada" in trainer_type:
+            if "delta" in trainer_type:
+                print x, y
                 avg_cost = train_fn(x, y)
             else:
                 avg_cost = train_fn(x, y, lr)
@@ -243,6 +297,8 @@ if __name__=='__main__':
     if arguments['--iterator-type'] != None:
         if "sentences" in arguments['--iterator-type']:
             iterator_type = DatasetSentencesIterator
+        elif "dtw" in arguments['--iterator-type']:
+            iterator_type = DatasetDTWIterator
         else:
             iterator_type = DatasetBatchIterator  # TODO
     batch_size = 100
@@ -288,10 +344,12 @@ if __name__=='__main__':
         #layers_types=[ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[1024, 1024, 1024],  # TODO in opts
         #dropout_rates=[0.2, 0.3, 0.4, 0.5],  # TODO in opts
+        layers_types=[ReLU, ReLU, ReLU],
+        layers_sizes=[1024, 1024],  # TODO in opts
         #layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
-        layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
-        layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts
-        dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],  # TODO in opts
+        #layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
+        #layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts
+        #dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],  # TODO in opts
         recurrent_connections=[],  # TODO in opts
         prefix_fname=prefix_fname,
         debug_on_test_only=debug_on_test_only,

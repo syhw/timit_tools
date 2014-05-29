@@ -13,6 +13,11 @@ def build_shared_zeros(shape, name):
             name=name, borrow=True)
 
 
+def RMSE_dist(x1, x2):
+    """ Root mean square error of the distances between x1 and x2. """
+    return T.mean(T.sqrt((x1 - x2).norm(2, axis=-1) **2))
+
+
 class NeuralNet(object):
     def __init__(self, numpy_rng, theano_rng=None, 
             n_ins=40*3,
@@ -157,7 +162,6 @@ class NeuralNet(object):
         return scoref
 
 
-
 class DropoutNet(NeuralNet):
     def __init__(self, numpy_rng, theano_rng=None, 
             n_ins=40*3,
@@ -198,3 +202,100 @@ class DropoutNet(NeuralNet):
         self.errors = self.layers[-1].errors(self.y)
 
 
+class ABNeuralNet(object):  #NeuralNet):
+    def __init__(self, numpy_rng, theano_rng=None, 
+            n_ins=40*3,
+            layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
+            layers_sizes=[1024, 1024, 1024, 1024],
+            n_outs=62 * 3,
+            rho=0.8, eps=1.5E-7,  # TODO refine
+            debugprint=False):
+        #super(AB_NeuralNet, self).__init__(numpy_rng, theano_rng,
+        #        n_ins, layers_types, layers_sizes, n_outs, rho, eps,
+        #        debugprint)
+        self.layers = []
+        self.params = []
+        self.n_layers = len(layers_sizes)
+        assert self.n_layers > 0
+        self._rho = rho  # ``momentum'' for adadelta
+        self._eps = eps  # epsilon for adadelta
+        self._accugrads = []  # for adadelta
+        self._accudeltas = []  # for adadelta
+
+        if theano_rng == None:
+            theano_rng = RandomStreams(numpy_rng.randint(2 ** 30))
+
+        self.x1 = T.fmatrix('x1')
+        self.x2 = T.fmatrix('x2')
+        
+        self.layers_ins = [n_ins] + layers_sizes
+        self.layers_outs = layers_sizes + [n_outs]
+        layer_input1 = self.x1
+        layer_input2 = self.x2
+        
+        for layer_type, n_in, n_out in zip(layers_types,
+                self.layers_ins, self.layers_outs):
+            this_layer1 = layer_type(rng=numpy_rng,
+                    input=layer_input1, n_in=n_in, n_out=n_out)
+            this_layer2 = layer_type(rng=numpy_rng,
+                    input=layer_input2, n_in=n_in, n_out=n_out,
+                    W=this_layer1.W, b=this_layer1.b)
+            assert hasattr(this_layer1, 'output')
+            assert hasattr(this_layer2, 'output')
+            self.params.extend(this_layer1.params)
+            self._accugrads.extend([build_shared_zeros(t.shape.eval(),
+                'accugrad') for t in this_layer1.params])
+            self._accudeltas.extend([build_shared_zeros(t.shape.eval(),
+                'accudelta') for t in this_layer1.params])
+            self.layers.append(this_layer1)
+            self.layers.append(this_layer2)
+            layer_input1 = this_layer1.output
+            layer_input2 = this_layer2.output
+
+        self.cost = RMSE_dist(self.layers[-1].output, self.layers[-2].output)
+        if debugprint:
+            theano.printing.debugprint(self.cost)
+
+    def get_adadelta_trainer(self):
+        batch_x1 = T.fmatrix('batch_x1')
+        batch_x2 = T.fmatrix('batch_x2')
+        batch_y = T.iscalar('batch_y')
+        # compute the gradients with respect to the model parameters
+        cost = T.switch(batch_y, self.cost, -self.cost)
+        gparams = T.grad(cost, self.params)
+
+        # compute list of weights updates
+        updates = OrderedDict()
+        for accugrad, accudelta, param, gparam in zip(self._accugrads,
+                self._accudeltas, self.params, gparams):
+            # c.f. Algorithm 1 in the Adadelta paper (Zeiler 2012)
+            agrad = self._rho * accugrad + (1 - self._rho) * gparam * gparam
+            dx = - T.sqrt((accudelta + self._eps) / (agrad + self._eps)) * gparam
+            updates[accudelta] = self._rho * accudelta + (1 - self._rho) * dx * dx
+            updates[param] = param + dx
+            updates[accugrad] = agrad
+
+        train_fn = theano.function(inputs=[theano.Param(batch_x1), 
+            theano.Param(batch_x2), theano.Param(batch_y)],
+            outputs=cost,
+            updates=updates,
+            givens={self.x1: batch_x1, self.x2: batch_x2})
+
+        return train_fn
+
+    def score_classif(self, given_set):
+        """ returns means RMSEs """  # TODO change this cost function for that
+        batch_x1 = T.fmatrix('batch_x1')
+        batch_x2 = T.fmatrix('batch_x2')
+        batch_y = T.iscalar('batch_y')
+        cost = T.switch(batch_y, self.cost, -self.cost)
+        score = theano.function(inputs=[theano.Param(batch_x1), 
+            theano.Param(batch_x2), theano.Param(batch_y)],
+                outputs=cost,
+                givens={self.x1: batch_x1, self.x2: batch_x2})
+
+        # Create a function that scans the entire set given as input
+        def scoref():
+            return [score(batch_x1, batch_x2, batch_y) for batch_x1, batch_x2, batch_y in given_set]
+
+        return scoref

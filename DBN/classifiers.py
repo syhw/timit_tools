@@ -8,19 +8,15 @@ import theano
 import theano.tensor as T
 
 
-class LogisticRegression(object):
-    """Multi-class Logistic Regression
-    """
-
+class BasicLinear(object):
     def __init__(self, rng, input, n_in, n_out, W=None, b=None):
         # rng is a required useless parameter so that we keep the same
         # __init__ signature as for hidden layers (see layers.py)
         if W != None:
             self.W = W
         else:
-            self.W = theano.shared(value=numpy.zeros((n_in, n_out),
-                dtype=theano.config.floatX),
-                name='W', borrow=True)
+            W_values = numpy.zeros((n_in, n_out), dtype=theano.config.floatX)
+            self.W = theano.shared(value=W_values, name='W', borrow=True)
         if b != None:
             self.b = b
         else:
@@ -28,6 +24,14 @@ class LogisticRegression(object):
                 dtype=theano.config.floatX),
                 name='b', borrow=True)
 
+
+class LogisticRegression(BasicLinear):
+    """Multi-class Logistic Regression
+    """
+
+    def __init__(self, rng, input, n_in, n_out, W=None, b=None):
+        super(LogisticRegression, self).__init__(rng, input, n_in, n_out,
+                W, b)
         # compute vector of class-membership probabilities in symbolic form
         self.p_y_given_x = T.nnet.softmax(T.dot(input, self.W) + self.b)
 

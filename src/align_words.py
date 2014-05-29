@@ -27,7 +27,8 @@ def find_words(folder):
 
 def do_dtw(word, x, y):
     dtw = DTW(x, y, return_alignment=1)
-    return word, x, y, dtw[0], dtw[-1][0]
+    # word, x, y, cost_dtw, dtw_x_to_y_mapping, dtw_y_to_x_mapping
+    return word, x, y, dtw[0], dtw[-1][1], dtw[-1][2]
 
 
 def match_words(d, min_len_word_char=4, omit_words=['the'], before_after=3,
