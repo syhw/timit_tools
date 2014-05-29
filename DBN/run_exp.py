@@ -6,7 +6,7 @@ Usage:
     [--features=fbank] [--init-lr=0.001] [--epochs=500] 
     [--network-type=dropout_XXX] [--trainer-type=adadelta] 
     [--prefix-output-fname=my_prefix_42] [--debug-test] [--debug-print] 
-    [--debug-time]
+    [--debug-time] [--debug-plot=0]
 
 
 Options:
@@ -41,11 +41,14 @@ Options:
     default is False, using it makes it True
     --debug-time               Flag that activates timing epoch duration
     default is False, using it makes it True
-
+    --debug-plot=int           Level of debug plotting, 1: costs
+    default is 0               >= 2: gradients & updates
 """
 
 import socket, docopt, cPickle, time, sys, os
 import numpy
+import prettyplotlib as ppl
+import matplotlib.pyplot as plt
 
 from prep_timit import load_data
 from dataset_iterators import DatasetSentencesIterator, DatasetBatchIterator
@@ -61,6 +64,35 @@ elif socket.gethostname() == "TODO":  # TODO
     DEFAULT_DATASET = '/media/bigdata/TIMIT_train_dev_test'
 
 
+
+def plot_costs(cost):
+    pass
+
+def plot_params_gradients_updates(iteration, l):
+    def plot_helper(li, ti, p):
+        fig, ax = plt.subplots(1)
+        if li % 2:
+            title = "biases" + ti
+            ppl.bar(ax, numpy.arange(p.shape[0]), p)
+        else:
+            title = "weights" + ti
+            ppl.pcolormesh(fig, ax, p)
+        plt.title(title)
+        plt.savefig(title + ".png")
+        #ppl.show()
+        plt.close()
+
+    params, gparams = l[:len(l)/2], l[len(l)/2:]
+    title_iter =  "_iter_%04i" % iteration
+    for layer_ind, param in enumerate(params):
+        title = "_for_layer_" + str(layer_ind/2) + title_iter
+        plot_helper(layer_ind, title, param)
+    for layer_ind, gparam in enumerate(gparams):
+        title = "_gradients_for_layer_" + str(layer_ind/2) + title_iter
+        plot_helper(layer_ind, title, gparam)
+    # TODO updates 
+
+
 def run(dataset=DEFAULT_DATASET, dataset_name='timit',
         iterator_type=DatasetSentencesIterator, batch_size=100,
         nframes=13, features="fbank",
@@ -73,7 +105,8 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
         prefix_fname='',
         debug_on_test_only=False,
         debug_print=False,
-        debug_time=False):
+        debug_time=False,
+        debug_plot=0):
     """
     FIXME TODO
     """
@@ -111,7 +144,10 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
         ten_percent = int(0.1 * len(data))
 
         n_ins = x1[0].shape[1] * nframes
-        n_outs = 50
+        
+        n_outs = 100
+        if debug_plot >= 2:
+            n_outs = 50
 
         # TODO
         print "nframes:", nframes
@@ -191,12 +227,20 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
     print '... getting the training functions'
     print trainer_type
     train_fn = None
-    if trainer_type == "adadelta":
-        train_fn = nnet.get_adadelta_trainer()
-    elif trainer_type == "adagrad":
-        train_fn = nnet.get_adagrad_trainer()
+    if debug_plot:
+        if trainer_type == "adadelta":
+            train_fn = nnet.get_adadelta_trainer(debug=True)
+        elif trainer_type == "adagrad":
+            train_fn = nnet.get_adagrad_trainer(debug=True)
+        else:
+            train_fn = nnet.get_SGD_trainer(debug=True)
     else:
-        train_fn = nnet.get_SGD_trainer()
+        if trainer_type == "adadelta":
+            train_fn = nnet.get_adadelta_trainer()
+        elif trainer_type == "adagrad":
+            train_fn = nnet.get_adagrad_trainer()
+        else:
+            train_fn = nnet.get_SGD_trainer()
 
     train_scoref = nnet.score_classif(train_set_iterator)
     valid_scoref = nnet.score_classif(valid_set_iterator)
@@ -231,18 +275,31 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
             timer = time.time()
         for iteration, (x, y) in enumerate(data_iterator):
             avg_cost = 0.
-            if "delta" in trainer_type:
-                print x, y
-                avg_cost = train_fn(x, y)
+            if "ab_net" in network_type:  # remove need for this if
+                if "delta" in trainer_type:  # TODO remove need for this if
+                    avg_cost = train_fn(x[0], x[1], y)
+                else:
+                    avg_cost = train_fn(x[0], x[1], y, lr)
+                if debug_plot >= 1:
+                    print "cost:", avg_cost[0]
+                    plot_costs(avg_cost[0])
+                if debug_plot >= 2:
+                    plot_params_gradients_updates(iteration, avg_cost[1:])
+                #print "======================================"
+                #if iteration > 20:
+                #    sys.exit(0)
             else:
-                avg_cost = train_fn(x, y, lr)
+                if "delta" in trainer_type:  # TODO remove need for this if
+                    avg_cost = train_fn(x, y)
+                else:
+                    avg_cost = train_fn(x, y, lr)
             avg_costs.append(avg_cost)
         if debug_time:
             print('  epoch %i took %f seconds' % (epoch, time.time() - timer))
         print('  epoch %i, avg costs %f' % \
               (epoch, numpy.mean(avg_costs)))
-        print('  epoch %i, training error %f %%' % \
-              (epoch, numpy.mean(train_scoref()) * 100.))
+        print('  epoch %i, training error %f' % \
+              (epoch, numpy.mean(train_scoref())))
         # TODO update lr(t) = lr(0) / (1 + lr(0) * lambda * t)
         # or another scheme for learning rate decay
 
@@ -252,8 +309,8 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
         # we check the validation loss on every epoch
         validation_losses = valid_scoref()
         this_validation_loss = numpy.mean(validation_losses)  # TODO this is a mean of means (with different lengths)
-        print('  epoch %i, validation error %f %%' % \
-              (epoch, this_validation_loss * 100.))
+        print('  epoch %i, validation error %f' % \
+              (epoch, this_validation_loss))
         # if we got the best validation score until now
         if this_validation_loss < best_validation_loss:
             with open(output_file_name + '.pickle', 'w') as f:
@@ -267,9 +324,8 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
             # test it on the test set
             test_losses = test_scoref()
             test_score = numpy.mean(test_losses)  # TODO this is a mean of means (with different lengths)
-            print(('  epoch %i, test error of '
-                   'best model %f %%') %
-                  (epoch, test_score * 100.))
+            print(('  epoch %i, test error of best model %f') %
+                  (epoch, test_score))
         if patience <= iteration:  # TODO correct that
             done_looping = True
             break
@@ -334,6 +390,9 @@ if __name__=='__main__':
     debug_time = False
     if arguments['--debug-time']:
         debug_time = True
+    debug_plot = 0
+    if arguments['--debug-plot']:
+        debug_plot = int(arguments['--debug-plot'])
 
     run(dataset=dataset, dataset_name=dataset_name,
         iterator_type=iterator_type, batch_size=batch_size,
@@ -344,8 +403,10 @@ if __name__=='__main__':
         #layers_types=[ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[1024, 1024, 1024],  # TODO in opts
         #dropout_rates=[0.2, 0.3, 0.4, 0.5],  # TODO in opts
-        layers_types=[ReLU, ReLU, ReLU],
-        layers_sizes=[1024, 1024],  # TODO in opts
+        #layers_types=[ReLU, ReLU, ReLU],
+        #layers_sizes=[1024, 1024],  # TODO in opts
+        layers_types=[ReLU, ReLU],
+        layers_sizes=[200],  # TODO in opts
         #layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts
@@ -354,4 +415,5 @@ if __name__=='__main__':
         prefix_fname=prefix_fname,
         debug_on_test_only=debug_on_test_only,
         debug_print=debug_print,
-        debug_time=debug_time)
+        debug_time=debug_time,
+        debug_plot=debug_plot)

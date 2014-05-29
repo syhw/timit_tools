@@ -13,11 +13,6 @@ def build_shared_zeros(shape, name):
             name=name, borrow=True)
 
 
-def RMSE_dist(x1, x2):
-    """ Root mean square error of the distances between x1 and x2. """
-    return T.mean(T.sqrt((x1 - x2).norm(2, axis=-1) **2))
-
-
 class NeuralNet(object):
     def __init__(self, numpy_rng, theano_rng=None, 
             n_ins=40*3,
@@ -208,7 +203,8 @@ class ABNeuralNet(object):  #NeuralNet):
             layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
             layers_sizes=[1024, 1024, 1024, 1024],
             n_outs=62 * 3,
-            rho=0.8, eps=1.5E-7,  # TODO refine
+            rho=0.8, eps=1.E-3,  # TODO refine
+            lambd=0.1,
             debugprint=False):
         #super(AB_NeuralNet, self).__init__(numpy_rng, theano_rng,
         #        n_ins, layers_types, layers_sizes, n_outs, rho, eps,
@@ -219,6 +215,7 @@ class ABNeuralNet(object):  #NeuralNet):
         assert self.n_layers > 0
         self._rho = rho  # ``momentum'' for adadelta
         self._eps = eps  # epsilon for adadelta
+        self._lambda = lambd # penalty for L1 regularization
         self._accugrads = []  # for adadelta
         self._accudeltas = []  # for adadelta
 
@@ -227,6 +224,7 @@ class ABNeuralNet(object):  #NeuralNet):
 
         self.x1 = T.fmatrix('x1')
         self.x2 = T.fmatrix('x2')
+        self.y = T.iscalar('y')
         
         self.layers_ins = [n_ins] + layers_sizes
         self.layers_outs = layers_sizes + [n_outs]
@@ -237,32 +235,76 @@ class ABNeuralNet(object):  #NeuralNet):
                 self.layers_ins, self.layers_outs):
             this_layer1 = layer_type(rng=numpy_rng,
                     input=layer_input1, n_in=n_in, n_out=n_out)
-            this_layer2 = layer_type(rng=numpy_rng,
-                    input=layer_input2, n_in=n_in, n_out=n_out,
-                    W=this_layer1.W, b=this_layer1.b)
             assert hasattr(this_layer1, 'output')
-            assert hasattr(this_layer2, 'output')
+            layer_input1 = this_layer1.output
             self.params.extend(this_layer1.params)
             self._accugrads.extend([build_shared_zeros(t.shape.eval(),
                 'accugrad') for t in this_layer1.params])
             self._accudeltas.extend([build_shared_zeros(t.shape.eval(),
                 'accudelta') for t in this_layer1.params])
             self.layers.append(this_layer1)
-            self.layers.append(this_layer2)
-            layer_input1 = this_layer1.output
+            this_layer2 = layer_type(rng=numpy_rng,
+                    input=layer_input2, n_in=n_in, n_out=n_out,
+                    W=this_layer1.W, b=this_layer1.b)
+            assert hasattr(this_layer2, 'output')
             layer_input2 = this_layer2.output
+            self.layers.append(this_layer2)
 
-        self.cost = RMSE_dist(self.layers[-1].output, self.layers[-2].output)
+
+        self.squared_error = (layer_input1 - layer_input2).norm(2, axis=-1) **2
+        self.mse = T.mean(self.squared_error)
+        self.rmse = T.sqrt(self.mse)
+        self.sse = T.sum(self.squared_error)
+        self.rsse = T.sqrt(self.sse)
+        L2 = 0.
+        for param in self.params:
+            L2 += T.sum(param ** 2)
+        L1 = 0.
+        for param in self.params:
+            L1 += T.sum(abs(param))
+
+        #self.cost = T.switch(self.y, self.rsse, -self.rsse)
+        #self.mean_cost = T.switch(self.y, self.rmse, -self.rmse)
+        self.cost = T.switch(self.y, self.rsse, -self.rsse) + L1 + L2
+        self.mean_cost = T.switch(self.y, self.rmse, -self.rmse) + L1 + L2
         if debugprint:
             theano.printing.debugprint(self.cost)
 
-    def get_adadelta_trainer(self):
+    def get_SGD_trainer(self, debug=False):
+        """ Returns a plain SGD minibatch trainer with learning rate as param.
+        """
+        batch_x1 = T.fmatrix('batch_x1')
+        batch_x2 = T.fmatrix('batch_x2')
+        batch_y = T.iscalar('batch_y')
+        learning_rate = T.fscalar('lr')  # learning rate to use
+        # compute the gradients with respect to the model parameters
+        # using mean_cost so that the learning rate is not too dependent on the batch size
+        gparams = T.grad(self.mean_cost, self.params)
+
+        # compute list of weights updates
+        updates = OrderedDict()
+        for param, gparam in zip(self.params, gparams):
+            updates[param] = param - gparam * learning_rate 
+
+        outputs = self.mean_cost
+        if debug:
+            outputs = [self.cost] + self.params + gparams
+
+        train_fn = theano.function(inputs=[theano.Param(batch_x1), 
+            theano.Param(batch_x2), theano.Param(batch_y),
+            theano.Param(learning_rate)],
+            outputs=outputs,
+            updates=updates,
+            givens={self.x1: batch_x1, self.x2: batch_x2, self.y: batch_y})
+
+        return train_fn
+
+    def get_adadelta_trainer(self, debug=False):
         batch_x1 = T.fmatrix('batch_x1')
         batch_x2 = T.fmatrix('batch_x2')
         batch_y = T.iscalar('batch_y')
         # compute the gradients with respect to the model parameters
-        cost = T.switch(batch_y, self.cost, -self.cost)
-        gparams = T.grad(cost, self.params)
+        gparams = T.grad(self.cost, self.params)
 
         # compute list of weights updates
         updates = OrderedDict()
@@ -275,27 +317,30 @@ class ABNeuralNet(object):  #NeuralNet):
             updates[param] = param + dx
             updates[accugrad] = agrad
 
+        outputs = self.cost
+        if debug:
+            outputs = [self.cost] + self.params + gparams
+
         train_fn = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y)],
-            outputs=cost,
+            outputs=outputs,
             updates=updates,
-            givens={self.x1: batch_x1, self.x2: batch_x2})
+            givens={self.x1: batch_x1, self.x2: batch_x2, self.y: batch_y})
 
         return train_fn
 
     def score_classif(self, given_set):
-        """ returns means RMSEs """  # TODO change this cost function for that
+        """ returns means MSEs """  # TODO change this error function
         batch_x1 = T.fmatrix('batch_x1')
         batch_x2 = T.fmatrix('batch_x2')
         batch_y = T.iscalar('batch_y')
-        cost = T.switch(batch_y, self.cost, -self.cost)
         score = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y)],
-                outputs=cost,
-                givens={self.x1: batch_x1, self.x2: batch_x2})
+                outputs=self.mean_cost,
+                givens={self.x1: batch_x1, self.x2: batch_x2, self.y: batch_y})
 
         # Create a function that scans the entire set given as input
         def scoref():
-            return [score(batch_x1, batch_x2, batch_y) for batch_x1, batch_x2, batch_y in given_set]
+            return [score(batch_x1, batch_x2, batch_y) for (batch_x1, batch_x2), batch_y in given_set]
 
         return scoref

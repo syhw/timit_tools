@@ -118,9 +118,11 @@ class DatasetDTWIterator(object):
         return [self._x1_mem[i], self._x2_mem[i]]
 
     def __iter__(self):
-        #for x1, x2, y in izip(self._x1, self._x2, self._y):
         for i, y in enumerate(self._y):
+        ###for i in xrange(0, len(self._y), 10):
             if self._nframes > 1:
                 yield self._pad(i), y
+                ###yield [numpy.concatenate([self._pad(j)[0] for j in xrange(i, min(i+10, len(self._y)))]),
+                ###        numpy.concatenate([self._pad(j)[1] for j in xrange(i, min(i+10, len(self._y)))])], self._y[i]
             else:
                 yield [self._x1[i], self._x2[i]], y

@@ -77,7 +77,7 @@ class SigmoidLayer(Linear):
 
 class ReLU(Linear):
     def __init__(self, rng, input, n_in, n_out, W=None, b=None):
-        if b == None:
+        if b is None:
             b_values = numpy.zeros((n_out,), dtype=theano.config.floatX)
             b = theano.shared(value=b_values, name='b', borrow=True)
         super(ReLU, self).__init__(rng, input, n_in, n_out, W, b)
