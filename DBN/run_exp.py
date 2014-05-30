@@ -484,10 +484,10 @@ if __name__=='__main__':
         #dropout_rates=[0.2, 0.3, 0.4, 0.5],  # TODO in opts
         #layers_types=[ReLU, ReLU, ReLU],
         #layers_sizes=[1024, 1024],  # TODO in opts
-        layers_types=[Linear],
-        layers_sizes=[],  # TODO in opts
-        #layers_types=[ReLU, ReLU],
-        #layers_sizes=[200],  # TODO in opts
+        #layers_types=[Linear],
+        #layers_sizes=[],  # TODO in opts
+        layers_types=[ReLU, ReLU],
+        layers_sizes=[200],  # TODO in opts
         #layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts

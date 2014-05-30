@@ -275,8 +275,8 @@ class ABNeuralNet(object):  #NeuralNet):
 
         self.rsse_cost = T.switch(self.y, self.rsse, -self.rsse)
         self.rmse_cost = T.switch(self.y, self.rmse, -self.rmse)
-        self.sum_rmse_costs = T.sum(T.switch(self.y, self.rmse, -self.rmse))
-        self.sum_rsse_costs = T.sum(T.switch(self.y, self.rmse, -self.rmse))
+        self.sum_rmse_costs = T.sum(self.rmse_cost)
+        self.sum_rsse_costs = T.sum(self.rsse_cost)
         self.cost = self.sum_rmse_costs
         #self.cost = T.switch(self.y, self.rsse, -self.rsse) + L1
         #self.mean_cost = T.switch(self.y, self.rmse, -self.rmse) + L1
@@ -367,7 +367,7 @@ class ABNeuralNet(object):  #NeuralNet):
         batch_y = T.ivector('batch_y')
         score = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y)],
-                outputs=self.sum_rsse_costs,
+                outputs=self.mean_rmse_costs,
                 givens={self.x1: batch_x1, self.x2: batch_x2, self.y: batch_y})
 
         # Create a function that scans the entire set given as input
