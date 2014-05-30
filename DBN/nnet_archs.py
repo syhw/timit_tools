@@ -13,7 +13,7 @@ def build_shared_zeros(shape, name):
             name=name, borrow=True)
 
 
-class NeuralNet(object):
+class NeuralNet(object):  # TODO refactor with a base class for this and AB
     def __init__(self, numpy_rng, theano_rng=None, 
             n_ins=40*3,
             layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
@@ -23,7 +23,8 @@ class NeuralNet(object):
             debugprint=False):
         self.layers = []
         self.params = []
-        self.n_layers = len(layers_sizes)
+        self.n_layers = len(layers_types)
+        self.layers_types = layers_types
         assert self.n_layers > 0
         self._rho = rho  # ``momentum'' for adadelta
         self._eps = eps  # epsilon for adadelta
@@ -38,6 +39,7 @@ class NeuralNet(object):
         
         self.layers_ins = [n_ins] + layers_sizes
         self.layers_outs = layers_sizes + [n_outs]
+        
         layer_input = self.x
         
         for layer_type, n_in, n_out in zip(layers_types,
@@ -62,6 +64,13 @@ class NeuralNet(object):
             theano.printing.debugprint(self.cost)
 
         self.errors = self.layers[-1].errors(self.y)
+
+    def __repr__(self):
+        dimensions_layers_str = map(lambda x: "x".join(map(str, x)),
+                zip(self.layers_ins, self.layers_outs))
+        return "_".join(map(lambda x: "_".join((x[0].__name__, x[1])),
+            zip(self.layers_types, dimensions_layers_str)))
+
 
     def get_SGD_trainer(self):
         """ Returns a plain SGD minibatch trainer with learning rate as param.
@@ -203,7 +212,7 @@ class ABNeuralNet(object):  #NeuralNet):
             layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
             layers_sizes=[1024, 1024, 1024, 1024],
             n_outs=62 * 3,
-            rho=0.8, eps=1.E-3,  # TODO refine
+            rho=0.8, eps=1.E-6,  # TODO refine
             lambd=0.1,
             debugprint=False):
         #super(AB_NeuralNet, self).__init__(numpy_rng, theano_rng,
@@ -211,7 +220,8 @@ class ABNeuralNet(object):  #NeuralNet):
         #        debugprint)
         self.layers = []
         self.params = []
-        self.n_layers = len(layers_sizes)
+        self.n_layers = len(layers_types)
+        self.layers_types = layers_types
         assert self.n_layers > 0
         self._rho = rho  # ``momentum'' for adadelta
         self._eps = eps  # epsilon for adadelta
@@ -224,7 +234,7 @@ class ABNeuralNet(object):  #NeuralNet):
 
         self.x1 = T.fmatrix('x1')
         self.x2 = T.fmatrix('x2')
-        self.y = T.iscalar('y')
+        self.y = T.ivector('y')
         
         self.layers_ins = [n_ins] + layers_sizes
         self.layers_outs = layers_sizes + [n_outs]
@@ -263,32 +273,51 @@ class ABNeuralNet(object):  #NeuralNet):
         for param in self.params:
             L1 += T.sum(abs(param))
 
-        #self.cost = T.switch(self.y, self.rsse, -self.rsse)
-        #self.mean_cost = T.switch(self.y, self.rmse, -self.rmse)
-        self.cost = T.switch(self.y, self.rsse, -self.rsse) + L1 + L2
-        self.mean_cost = T.switch(self.y, self.rmse, -self.rmse) + L1 + L2
+        self.rsse_cost = T.switch(self.y, self.rsse, -self.rsse)
+        self.rmse_cost = T.switch(self.y, self.rmse, -self.rmse)
+        self.sum_rmse_costs = T.sum(T.switch(self.y, self.rmse, -self.rmse))
+        self.sum_rsse_costs = T.sum(T.switch(self.y, self.rmse, -self.rmse))
+        self.cost = self.sum_rmse_costs
+        #self.cost = T.switch(self.y, self.rsse, -self.rsse) + L1
+        #self.mean_cost = T.switch(self.y, self.rmse, -self.rmse) + L1
+
+        #cost = T.switch(self.y, self.rsse, -self.rsse)
+        #alpha = self._lambda * cost / L1
+        #self.cost = cost + alpha * L1
+
+        #mean_cost = T.switch(self.y, self.rmse, -self.rmse)
+        #alpha = self._lambda * mean_cost / L1
+        #self.mean_cost = mean_cost + alpha * L1
         if debugprint:
             theano.printing.debugprint(self.cost)
+
+    def __repr__(self):
+        dimensions_layers_str = map(lambda x: "x".join(map(str, x)),
+                zip(self.layers_ins, self.layers_outs))
+        return "_".join(map(lambda x: "_".join((x[0].__name__, x[1])),
+            zip(self.layers_types, dimensions_layers_str)))
 
     def get_SGD_trainer(self, debug=False):
         """ Returns a plain SGD minibatch trainer with learning rate as param.
         """
         batch_x1 = T.fmatrix('batch_x1')
         batch_x2 = T.fmatrix('batch_x2')
-        batch_y = T.iscalar('batch_y')
+        batch_y = T.ivector('batch_y')
         learning_rate = T.fscalar('lr')  # learning rate to use
         # compute the gradients with respect to the model parameters
         # using mean_cost so that the learning rate is not too dependent on the batch size
-        gparams = T.grad(self.mean_cost, self.params)
+        cost = self.sum_rmse_costs
+        gparams = T.grad(cost, self.params)
 
         # compute list of weights updates
         updates = OrderedDict()
         for param, gparam in zip(self.params, gparams):
             updates[param] = param - gparam * learning_rate 
 
-        outputs = self.mean_cost
+        outputs = cost
         if debug:
-            outputs = [self.cost] + self.params + gparams
+            outputs = [cost] + self.params + gparams +\
+                    [updates[param] for param in self.params]
 
         train_fn = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y),
@@ -302,9 +331,10 @@ class ABNeuralNet(object):  #NeuralNet):
     def get_adadelta_trainer(self, debug=False):
         batch_x1 = T.fmatrix('batch_x1')
         batch_x2 = T.fmatrix('batch_x2')
-        batch_y = T.iscalar('batch_y')
+        batch_y = T.ivector('batch_y')
         # compute the gradients with respect to the model parameters
-        gparams = T.grad(self.cost, self.params)
+        cost = self.sum_rsse_costs
+        gparams = T.grad(cost, self.params)
 
         # compute list of weights updates
         updates = OrderedDict()
@@ -317,9 +347,10 @@ class ABNeuralNet(object):  #NeuralNet):
             updates[param] = param + dx
             updates[accugrad] = agrad
 
-        outputs = self.cost
+        outputs = cost
         if debug:
-            outputs = [self.cost] + self.params + gparams
+            outputs = [cost] + self.params + gparams +\
+                    [updates[param] for param in self.params]
 
         train_fn = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y)],
@@ -333,14 +364,14 @@ class ABNeuralNet(object):  #NeuralNet):
         """ returns means MSEs """  # TODO change this error function
         batch_x1 = T.fmatrix('batch_x1')
         batch_x2 = T.fmatrix('batch_x2')
-        batch_y = T.iscalar('batch_y')
+        batch_y = T.ivector('batch_y')
         score = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y)],
-                outputs=self.mean_cost,
+                outputs=self.sum_rsse_costs,
                 givens={self.x1: batch_x1, self.x2: batch_x2, self.y: batch_y})
 
         # Create a function that scans the entire set given as input
         def scoref():
-            return [score(batch_x1, batch_x2, batch_y) for (batch_x1, batch_x2), batch_y in given_set]
+            return [score(x[0], x[1], y) for (x, y) in given_set]
 
         return scoref
