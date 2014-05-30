@@ -277,6 +277,8 @@ class ABNeuralNet(object):  #NeuralNet):
         self.rmse_cost = T.switch(self.y, self.rmse, -self.rmse)
         self.sum_rmse_costs = T.sum(self.rmse_cost)
         self.sum_rsse_costs = T.sum(self.rsse_cost)
+        self.mean_rmse_costs = T.mean(self.rmse_cost)
+        self.mean_rsse_costs = T.mean(self.rsse_cost)
         self.cost = self.sum_rmse_costs
         #self.cost = T.switch(self.y, self.rsse, -self.rsse) + L1
         #self.mean_cost = T.switch(self.y, self.rmse, -self.rmse) + L1
