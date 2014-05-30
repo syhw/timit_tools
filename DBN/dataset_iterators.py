@@ -74,27 +74,39 @@ class DatasetBatchIterator(object):
 class DatasetDTWIterator(object):
     """ An iterator on dynamic time warped words of the dataset. """
 
-    def __init__(self, x1, x2, y, nframes=1, batch_size=None, margin=False):
+    def __init__(self, x1, x2, y, nframes=1, batch_size=1, margin=False):
+        # x1 and x2 are tuples or arrays that are [nframes, nfeatures]
         self._x1 = x1
         self._x2 = x2
-        self._y = y  # says if x1 and x2 are same (1) or different (0)
+        self._y = [numpy.zeros(x.shape[0], dtype='int8') for x in self._x1]
+        # self._y says if frames in x1 and x2 are same (1) or different (0)
+        for ii, yy in enumerate(y):
+            self._y[ii][:] = yy
         self._nframes = nframes
         self._memoized_x = defaultdict(lambda: {})
         self._margin = 0
+        self._nwords = batch_size
         if margin:
             # margin says if we pad taking a margin into account
             self._margin = (self._nframes - 1) / 2
         self._x1_mem = []
         self._x2_mem = []
+        self._y_mem = []
 
 
-    def _pad(self, i):  # TODO
-        """ Method because of the memoization. """
+    def _memoize(self, i):
+        """ Computes the corresponding x1/x2/y for the given i depending on the
+        self._nframes (stacking x1/x2 features for self._nframes), and
+        self._nwords (number of words per mini-batch).
+        """
+        ii = i/self._nwords
         if i < len(self._x1_mem) and i < len(self._x2_mem):
-            return self._x1_mem[i], self._x2_mem[i]
+            return [[self._x1_mem[ii], self._x2_mem[ii]], self._y_mem[ii]]
 
         def local_pad(x):
             nf = self._nframes
+            if nf <= 1:
+                return x
             if self._margin:
                 ma = self._margin
                 ret = numpy.zeros((x.shape[0] - 2 * ma, x.shape[1] * nf),
@@ -113,16 +125,15 @@ class DatasetDTWIterator(object):
                             'constant', constant_values=(0, 0))
                 return ret
 
-        self._x1_mem.append(local_pad(self._x1[i]))
-        self._x2_mem.append(local_pad(self._x2[i]))
-        return [self._x1_mem[i], self._x2_mem[i]]
+        self._x1_mem.append(numpy.concatenate([local_pad(self._x1[i+k]) for k
+            in xrange(self._nwords) if i+k < len(self._x1)]))
+        self._x2_mem.append(numpy.concatenate([local_pad(self._x2[i+k]) for k
+            in xrange(self._nwords) if i+k < len(self._x2)]))
+        self._y_mem.append(numpy.concatenate([self._y[i+k] for k in
+            xrange(self._nwords) if i+k < len(self._y)]))
+        ii = i/self._nwords
+        return [[self._x1_mem[ii], self._x2_mem[ii]], self._y_mem[ii]]
 
     def __iter__(self):
-        for i, y in enumerate(self._y):
-        ###for i in xrange(0, len(self._y), 10):
-            if self._nframes > 1:
-                yield self._pad(i), y
-                ###yield [numpy.concatenate([self._pad(j)[0] for j in xrange(i, min(i+10, len(self._y)))]),
-                ###        numpy.concatenate([self._pad(j)[1] for j in xrange(i, min(i+10, len(self._y)))])], self._y[i]
-            else:
-                yield [self._x1[i], self._x2[i]], y
+        for i in xrange(0, len(self._y), self._nwords):
+            yield self._memoize(i)

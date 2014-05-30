@@ -49,6 +49,8 @@ import socket, docopt, cPickle, time, sys, os
 import numpy
 import prettyplotlib as ppl
 import matplotlib.pyplot as plt
+import joblib
+from random import shuffle
 
 from prep_timit import load_data
 from dataset_iterators import DatasetSentencesIterator, DatasetBatchIterator
@@ -62,13 +64,38 @@ if socket.gethostname() == "syhws-MacBook-Pro.local":
     DEFAULT_DATASET = '/Users/gabrielsynnaeve/postdoc/datasets/TIMIT_train_dev_test'
 elif socket.gethostname() == "TODO":  # TODO
     DEFAULT_DATASET = '/media/bigdata/TIMIT_train_dev_test'
+DEBUG = False
 
+
+def print_mean_weights_biases(params):
+    for layer_ind, param in enumerate(params):
+        filler = "weight"
+        if layer_ind % 2:
+            filler = "bias"
+        print("layer %i mean %s values %f and std devs %f" % (layer_ind/2, 
+            filler, numpy.mean(param.eval()), numpy.std(param.eval())))
 
 
 def plot_costs(cost):
+    # TODO
     pass
 
-def plot_params_gradients_updates(iteration, l):
+
+def rolling_avg_pgu(iteration, pgu, l):
+    # (iteration * pgu + l) / (iteration + 1)
+    assert len(l) == len(pgu)
+    ll = len(l)/3
+    params, gparams, updates = l[:ll], l[ll:-ll], l[-ll:]
+    mpars, mgpars, mupds = pgu[:ll], pgu[ll:-ll], pgu[-ll:]
+    ii = iteration + 1
+    return [(iteration * mpars[k] + p) / ii for k, p in enumerate(params)] +\
+            [(iteration * mgpars[k] + g) / ii for k, g in enumerate(gparams)] +\
+            [(iteration * mupds[k] + u) / ii for k, u in enumerate(updates)]
+
+
+def plot_params_gradients_updates(n, l):
+    # TODO currently works only with THEANO_FLAGS="device=cpu" (not working on
+    #CudaNDArrays)
     def plot_helper(li, ti, p):
         fig, ax = plt.subplots(1)
         if li % 2:
@@ -81,16 +108,27 @@ def plot_params_gradients_updates(iteration, l):
         plt.savefig(title + ".png")
         #ppl.show()
         plt.close()
-
-    params, gparams = l[:len(l)/2], l[len(l)/2:]
-    title_iter =  "_iter_%04i" % iteration
+    ll = len(l)/3
+    params, gparams, updates = l[:ll], l[ll:-ll], l[-ll:]
+    if DEBUG:
+        print "params"
+        print params
+        print "===================="
+        print "gparams"  # TODO find out why not CudaNDArray here
+        print gparams
+        print "===================="
+        print "updates"  # TODO find out why not CudaNDArray here
+        print updates
+    title_iter =  "_%04i" % n
     for layer_ind, param in enumerate(params):
-        title = "_for_layer_" + str(layer_ind/2) + title_iter
+        title = "_for_layer_" + str(layer_ind/3) + title_iter
         plot_helper(layer_ind, title, param)
     for layer_ind, gparam in enumerate(gparams):
-        title = "_gradients_for_layer_" + str(layer_ind/2) + title_iter
+        title = "_gradients_for_layer_" + str(layer_ind/3) + title_iter
         plot_helper(layer_ind, title, gparam)
-    # TODO updates 
+    for layer_ind, update in enumerate(updates):
+        title = "_updates_for_layer_" + str(layer_ind/3) + title_iter
+        plot_helper(layer_ind, title, update)
 
 
 def run(dataset=DEFAULT_DATASET, dataset_name='timit',
@@ -123,18 +161,26 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
     print "loading dataset from", dataset
      # TODO DO A FUNCTION
     if dataset[-7:] == '.joblib':
-        # TODO
-        import joblib
+        # TODO clean
         datasets = joblib.load(dataset)
-        from random import shuffle
         #datasets = [(word_label, fbanks1, fbanks2, DTW_cost, DTW_1to2, DTW_2to1)]
+        if debug_print:
+            # some stats on the DTW
+            dtw_costs = zip(*datasets)[3]
+            words_frames = numpy.asarray([fb.shape[0] for fb in zip(*datasets)[1]])
+            print "mean DTW cost", numpy.mean(dtw_costs), "std dev", numpy.std(dtw_costs)
+            print "mean word length in frames", numpy.mean(words_frames), "std dev", numpy.std(words_frames)
+            print "mean DTW cost per frame", numpy.mean(dtw_costs/words_frames), "std dev", numpy.std(dtw_costs/words_frames)
+            # /some stats on the DTW
+        # TODO maybe ceil on the DTW cost to be considered "same"
+
         all_the_data = numpy.r_[numpy.concatenate([e[1] for e in datasets]),
             numpy.concatenate([e[2] for e in datasets])]
         mean = numpy.mean(all_the_data, 0)
         std = numpy.std(all_the_data, 0)
         data = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
                 for e in datasets]
-        shuffle(data)
+        shuffle(data)  # in place
         x1, x2 = zip(*data)
         y = [1 for _ in xrange(len(data))]
         assert x1[0].shape[0] == x2[0].shape[0]
@@ -145,9 +191,7 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
 
         n_ins = x1[0].shape[1] * nframes
         
-        n_outs = 100
-        if debug_plot >= 2:
-            n_outs = 50
+        n_outs = 100 # TODO
 
         # TODO
         print "nframes:", nframes
@@ -222,6 +266,8 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
                 layers_sizes=layers_sizes,
                 n_outs=n_outs,
                 debugprint=debug_print)
+    print "Created a neural net as:",
+    print str(nnet)
 
     # get the training, validation and testing function for the model
     print '... getting the training functions'
@@ -267,10 +313,13 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
     epoch = 0
     lr = init_lr
     timer = None
+    if debug_plot:
+        print_mean_weights_biases(nnet.params)
 
     while (epoch < max_epochs) and (not done_looping):
         epoch = epoch + 1
         avg_costs = []
+        avg_params_gradients_updates = []
         if debug_time:
             timer = time.time()
         for iteration, (x, y) in enumerate(data_iterator):
@@ -280,20 +329,31 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
                     avg_cost = train_fn(x[0], x[1], y)
                 else:
                     avg_cost = train_fn(x[0], x[1], y, lr)
-                if debug_plot >= 1:
+                if debug_plot >= 2:
                     print "cost:", avg_cost[0]
                     plot_costs(avg_cost[0])
                 if debug_plot >= 2:
+                    if not len(avg_params_gradients_updates):
+                        avg_params_gradients_updates = avg_cost[1:]
+                    else:
+                        avg_params_gradients_updates = rolling_avg_pgu(
+                                iteration, avg_params_gradients_updates,
+                                avg_cost[1:])
+                if debug_plot >= 3:
                     plot_params_gradients_updates(iteration, avg_cost[1:])
-                #print "======================================"
-                #if iteration > 20:
-                #    sys.exit(0)
             else:
                 if "delta" in trainer_type:  # TODO remove need for this if
                     avg_cost = train_fn(x, y)
                 else:
                     avg_cost = train_fn(x, y, lr)
-            avg_costs.append(avg_cost)
+            if type(avg_cost) == list:
+                avg_costs.append(avg_cost[0])
+            else:
+                avg_costs.append(avg_cost)
+        if debug_plot:
+            print_mean_weights_biases(nnet.params)
+        if debug_plot >= 2:
+            plot_params_gradients_updates(epoch, avg_params_gradients_updates)
         if debug_time:
             print('  epoch %i took %f seconds' % (epoch, time.time() - timer))
         print('  epoch %i, avg costs %f' % \
@@ -405,8 +465,10 @@ if __name__=='__main__':
         #dropout_rates=[0.2, 0.3, 0.4, 0.5],  # TODO in opts
         #layers_types=[ReLU, ReLU, ReLU],
         #layers_sizes=[1024, 1024],  # TODO in opts
-        layers_types=[ReLU, ReLU],
-        layers_sizes=[200],  # TODO in opts
+        layers_types=[Linear],
+        layers_sizes=[],  # TODO in opts
+        #layers_types=[ReLU, ReLU],
+        #layers_sizes=[200],  # TODO in opts
         #layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts

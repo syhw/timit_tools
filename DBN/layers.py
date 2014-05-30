@@ -62,11 +62,17 @@ class Linear(object):
         self.params = [self.W, self.b]
         self.output = T.dot(self.input, self.W) + self.b
 
+    def __repr__(self):
+        return "Linear"
+
 
 class NonLinearLayer(Linear):
     def __init__(self, rng, input, n_in, n_out, activation, W=None, b=None):
         super(NonLinearLayer, self).__init__(rng, input, n_in, n_out, W, b)
         self.output = activation(self.output)
+
+    def __repr__(self):
+        return "NonLinear"
 
 
 class SigmoidLayer(Linear):
