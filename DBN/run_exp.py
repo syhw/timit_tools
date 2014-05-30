@@ -1,7 +1,7 @@
 """Runs deep learning experiments on speech dataset.
 
 Usage:
-    run_exp.py [--dataset=path] [--dataset-name=timit] 
+    run_exp.py [--dataset-path=path] [--dataset-name=timit] 
     [--iterator-type=sentences] [--batch-size=100] [--nframes=13] 
     [--features=fbank] [--init-lr=0.001] [--epochs=500] 
     [--network-type=dropout_XXX] [--trainer-type=adadelta] 
@@ -12,7 +12,7 @@ Usage:
 Options:
     -h --help                   Show this screen
     --version                   Show version
-    --dataset=str               A valid path to the dataset
+    --dataset-path=str          A valid path to the dataset
     default is timit
     --dataset-name=str          Name of the dataset (for outputs/saves)
     default is "timit"
@@ -131,7 +131,7 @@ def plot_params_gradients_updates(n, l):
         plot_helper(layer_ind, title, update)
 
 
-def run(dataset=DEFAULT_DATASET, dataset_name='timit',
+def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
         iterator_type=DatasetSentencesIterator, batch_size=100,
         nframes=13, features="fbank",
         init_lr=0.001, max_epochs=500, 
@@ -158,42 +158,61 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
 
     n_ins = None
     n_outs = None
-    print "loading dataset from", dataset
+    print "loading dataset from", dataset_path
      # TODO DO A FUNCTION
-    if dataset[-7:] == '.joblib':
+    if dataset_path[-7:] == '.joblib':
         # TODO clean
-        datasets = joblib.load(dataset)
-        #datasets = [(word_label, fbanks1, fbanks2, DTW_cost, DTW_1to2, DTW_2to1)]
+        data_same = joblib.load(dataset_path)
+        #data_same = [(word_label, fbanks1, fbanks2, DTW_cost, DTW_1to2, DTW_2to1)]
         if debug_print:
             # some stats on the DTW
-            dtw_costs = zip(*datasets)[3]
-            words_frames = numpy.asarray([fb.shape[0] for fb in zip(*datasets)[1]])
+            dtw_costs = zip(*data_same)[3]
+            words_frames = numpy.asarray([fb.shape[0] for fb in zip(*data_same)[1]])
             print "mean DTW cost", numpy.mean(dtw_costs), "std dev", numpy.std(dtw_costs)
             print "mean word length in frames", numpy.mean(words_frames), "std dev", numpy.std(words_frames)
             print "mean DTW cost per frame", numpy.mean(dtw_costs/words_frames), "std dev", numpy.std(dtw_costs/words_frames)
             # /some stats on the DTW
         # TODO maybe ceil on the DTW cost to be considered "same"
 
-        all_the_data = numpy.r_[numpy.concatenate([e[1] for e in datasets]),
-            numpy.concatenate([e[2] for e in datasets])]
-        mean = numpy.mean(all_the_data, 0)
-        std = numpy.std(all_the_data, 0)
-        data = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
-                for e in datasets]
-        shuffle(data)  # in place
-        x1, x2 = zip(*data)
-        y = [1 for _ in xrange(len(data))]
+        x_arr_same = numpy.r_[numpy.concatenate([e[1] for e in data_same]),
+            numpy.concatenate([e[2] for e in data_same])]
+        print x_arr_same.shape
+
+        # we need about as much negative examples as positive ones
+        # TODO wrap this in try except or if
+        tmp = dataset_path.split('/')
+        neg_data_path = "/".join(tmp[:-1]) + "/neg" + tmp[-1][3:]
+        data_diff = joblib.load(neg_data_path)
+        x_arr_diff = numpy.r_[numpy.concatenate([e[0] for e in data_diff]),
+                numpy.concatenate([e[1] for e in data_diff])]
+        print x_arr_diff.shape
+        x_arr_all = numpy.concatenate([x_arr_same, x_arr_diff])
+        mean = numpy.mean(x_arr_all, 0)
+        std = numpy.std(x_arr_all, 0)
+
+        x_same = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
+                for e in data_same]
+        shuffle(x_same)  # in place
+        y_same = [1 for _ in xrange(len(x_same))]
+
+        x_diff = [((e[0] - mean) / std, (e[1] - mean) / std)
+                for e in data_diff]
+        shuffle(x_diff)
+        y_diff = [0 for _ in xrange(len(x_diff))]
+
+
+        y = [j for i in zip(y_same, y_diff) for j in i]
+        x = [j for i in zip(x_same, x_diff) for j in i]
+        x1, x2 = zip(*x)
         assert x1[0].shape[0] == x2[0].shape[0]
         assert x1[0].shape[1] == x2[0].shape[1]
         assert len(x1) == len(x2)
         assert len(x1) == len(y)
-        ten_percent = int(0.1 * len(data))
+        ten_percent = int(0.1 * len(x1))
 
         n_ins = x1[0].shape[1] * nframes
-        
         n_outs = 100 # TODO
 
-        # TODO
         print "nframes:", nframes
         train_set_iterator = iterator_type(x1[:-ten_percent], 
                 x2[:-ten_percent], y[:-ten_percent], # TODO
@@ -205,11 +224,11 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
                 x2[-ten_percent:], y[-ten_percent:], # TODO
                 nframes=nframes, batch_size=batch_size, margin=True)
     else:
-        datasets = load_data(dataset, nframes=1, features=features, scaling='normalize', cv_frac='fixed', speakers=False, numpy_array_only=True) 
+        data = load_data(dataset_path, nframes=1, features=features, scaling='normalize', cv_frac='fixed', speakers=False, numpy_array_only=True) 
 
-        train_set_x, train_set_y = datasets[0]
-        valid_set_x, valid_set_y = datasets[1]
-        test_set_x, test_set_y = datasets[2]
+        train_set_x, train_set_y = data[0]
+        valid_set_x, valid_set_y = data[1]
+        test_set_x, test_set_y = data[2]
         assert train_set_x.shape[1] == valid_set_x.shape[1]
         assert test_set_x.shape[1] == valid_set_x.shape[1]
 
@@ -391,9 +410,9 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
             break
 
     end_time = time.clock()
-    print(('Optimization complete with best validation score of %f %%, '
-           'with test performance %f %%') %
-                 (best_validation_loss * 100., test_score * 100.))
+    print(('Optimization complete with best validation score of %f, '
+           'with test performance %f') %
+                 (best_validation_loss, test_score))
     print >> sys.stderr, ('The fine tuning code for file ' +
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
@@ -403,9 +422,9 @@ def run(dataset=DEFAULT_DATASET, dataset_name='timit',
 
 if __name__=='__main__':
     arguments = docopt.docopt(__doc__, version='run_exp version 0.1')
-    dataset=DEFAULT_DATASET
-    if arguments['--dataset'] != None:
-        dataset = arguments['--dataset']
+    dataset_path=DEFAULT_DATASET
+    if arguments['--dataset-path'] != None:
+        dataset_path = arguments['--dataset-path']
     dataset_name = 'timit'
     if arguments['--dataset-name'] != None:
         dataset_name = arguments['--dataset-name']
@@ -454,7 +473,7 @@ if __name__=='__main__':
     if arguments['--debug-plot']:
         debug_plot = int(arguments['--debug-plot'])
 
-    run(dataset=dataset, dataset_name=dataset_name,
+    run(dataset_path=dataset_path, dataset_name=dataset_name,
         iterator_type=iterator_type, batch_size=batch_size,
         nframes=nframes, features=features,
         init_lr=init_lr, max_epochs=max_epochs, 
