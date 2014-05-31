@@ -193,17 +193,29 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
         x_same = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
                 for e in data_same]
         shuffle(x_same)  # in place
-        y_same = [1 for _ in xrange(len(x_same))]
+        y_same = [[1 for _ in xrange(len(e[0]))] for i, e in enumerate(x_same)]
 
         x_diff = [((e[0] - mean) / std, (e[1] - mean) / std)
                 for e in data_diff]
         shuffle(x_diff)
-        y_diff = [0 for _ in xrange(len(x_diff))]
-
-
+        y_diff = [[0 for _ in xrange(len(e[0]))] for i, e in enumerate(x_diff)]
         y = [j for i in zip(y_same, y_diff) for j in i]
         x = [j for i in zip(x_same, x_diff) for j in i]
+        # [(x1 x2)] [(x3 x4)]
+        print len(y)
+        print len(x)
+        print y[:4]
+        print x[0][0].shape
+        print x[0][1].shape
+        print x[1][0].shape
+        print x[1][1].shape
         x1, x2 = zip(*x)
+        print x1[0].shape
+        print x2[0].shape
+        print x1[1].shape
+        print x2[1].shape
+        #print x1[:4]
+        #print x2[:4]
         assert x1[0].shape[0] == x2[0].shape[0]
         assert x1[0].shape[1] == x2[0].shape[1]
         assert len(x1) == len(x2)

@@ -260,12 +260,6 @@ class ABNeuralNet(object):  #NeuralNet):
             layer_input2 = this_layer2.output
             self.layers.append(this_layer2)
 
-
-        self.squared_error = (layer_input1 - layer_input2).norm(2, axis=-1) **2
-        self.mse = T.mean(self.squared_error)
-        self.rmse = T.sqrt(self.mse)
-        self.sse = T.sum(self.squared_error)
-        self.rsse = T.sqrt(self.sse)
         L2 = 0.
         for param in self.params:
             L2 += T.sum(param ** 2)
@@ -273,23 +267,28 @@ class ABNeuralNet(object):  #NeuralNet):
         for param in self.params:
             L1 += T.sum(abs(param))
 
+        self.squared_error = (layer_input1 - layer_input2).norm(2, axis=-1) **2
+        self.mse = T.mean(self.squared_error)
+        self.rmse = T.sqrt(self.mse)
+        self.sse = T.sum(self.squared_error)
+        self.rsse = T.sqrt(self.sse)
+
         self.rsse_cost = T.switch(self.y, self.rsse, -self.rsse)
         self.rmse_cost = T.switch(self.y, self.rmse, -self.rmse)
         self.sum_rmse_costs = T.sum(self.rmse_cost)
         self.sum_rsse_costs = T.sum(self.rsse_cost)
         self.mean_rmse_costs = T.mean(self.rmse_cost)
         self.mean_rsse_costs = T.mean(self.rsse_cost)
-        self.cost = self.sum_rmse_costs
-        #self.cost = T.switch(self.y, self.rsse, -self.rsse) + L1
-        #self.mean_cost = T.switch(self.y, self.rmse, -self.rmse) + L1
 
-        #cost = T.switch(self.y, self.rsse, -self.rsse)
-        #alpha = self._lambda * cost / L1
-        #self.cost = cost + alpha * L1
 
-        #mean_cost = T.switch(self.y, self.rmse, -self.rmse)
-        #alpha = self._lambda * mean_cost / L1
-        #self.mean_cost = mean_cost + alpha * L1
+        self.cos_sim = T.mean(((layer_input1 - layer_input2).norm(2, axis=-1) / 
+                (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))), axis=-1)  # TODO check
+        self.cos_sim_cost = T.switch(self.y, self.cos_sim, -self.cos_sim)
+        self.mean_cos_sim_cost = T.mean(self.cos_sim_cost)
+        self.sum_cos_sim_cost = T.sum(self.cos_sim_cost)
+
+        self.cost = self.sum_cos_sim_cost
+
         if debugprint:
             theano.printing.debugprint(self.cost)
 
@@ -308,7 +307,7 @@ class ABNeuralNet(object):  #NeuralNet):
         learning_rate = T.fscalar('lr')  # learning rate to use
         # compute the gradients with respect to the model parameters
         # using mean_cost so that the learning rate is not too dependent on the batch size
-        cost = self.sum_rmse_costs
+        cost = self.mean_cos_sim_cost
         gparams = T.grad(cost, self.params)
 
         # compute list of weights updates
@@ -335,7 +334,7 @@ class ABNeuralNet(object):  #NeuralNet):
         batch_x2 = T.fmatrix('batch_x2')
         batch_y = T.ivector('batch_y')
         # compute the gradients with respect to the model parameters
-        cost = self.sum_rsse_costs
+        cost = self.cost
         gparams = T.grad(cost, self.params)
 
         # compute list of weights updates
@@ -369,7 +368,7 @@ class ABNeuralNet(object):  #NeuralNet):
         batch_y = T.ivector('batch_y')
         score = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y)],
-                outputs=self.mean_rmse_costs,
+                outputs=self.cost,
                 givens={self.x1: batch_x1, self.x2: batch_x2, self.y: batch_y})
 
         # Create a function that scans the entire set given as input
