@@ -1,4 +1,5 @@
 import os, sys, joblib, random
+from multiprocessing import cpu_count
 from collections import defaultdict
 import numpy as np
 from dtw import DTW
@@ -88,7 +89,8 @@ def match_words(words_feats, serial=False):
                         continue
                     res.append(do_dtw(word, x, y))
     else:
-        res = joblib.Parallel(n_jobs=8)(joblib.delayed(do_dtw)(word, l[i], y)
+        res = joblib.Parallel(n_jobs=cpu_count()-1)(joblib.delayed(do_dtw)
+                (word, l[i], y)
                     for word, l in words_feats.iteritems()
                         for i, x in enumerate(l)
                             for j, y in enumerate(l)

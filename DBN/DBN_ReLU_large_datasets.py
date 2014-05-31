@@ -13,7 +13,7 @@ from theano.tensor.shared_randomstreams import RandomStreams
 from theano import shared
 
 from logistic_regression import LogisticRegression 
-from dataset_sentences_iterator import DatasetSentencesIterator 
+from dataset_iterators import DatasetSentencesIterator 
 from mlp import HiddenLayer
 from relu_rbm import RBM
 from relu_grbm import GRBM
