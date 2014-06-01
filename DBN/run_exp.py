@@ -5,7 +5,7 @@ Usage:
     [--iterator-type=sentences] [--batch-size=100] [--nframes=13] 
     [--features=fbank] [--init-lr=0.001] [--epochs=500] 
     [--network-type=dropout_XXX] [--trainer-type=adadelta] 
-    [--prefix-output-fname=my_prefix_42] [--debug-test] [--debug-print] 
+    [--prefix-output-fname=my_prefix_42] [--debug-test] [--debug-print=lvl] 
     [--debug-time] [--debug-plot=0]
 
 
@@ -36,8 +36,8 @@ Options:
     default is "" (empty string)
     --debug-test               Flag that activates training on the test set
     default is False, using it makes it True
-    --debug-print              Flag that activates printing the symbolic expr.
-                               computed by the network
+    --debug-print=int          Level of debug printing. 0: nothing, 1: network
+    default is 0               2: epochs/iters related
     default is False, using it makes it True
     --debug-time               Flag that activates timing epoch duration
     default is False, using it makes it True
@@ -142,7 +142,7 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
         recurrent_connections=[],
         prefix_fname='',
         debug_on_test_only=False,
-        debug_print=False,
+        debug_print=0,
         debug_time=False,
         debug_plot=0):
     """
@@ -201,21 +201,7 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
         y_diff = [[0 for _ in xrange(len(e[0]))] for i, e in enumerate(x_diff)]
         y = [j for i in zip(y_same, y_diff) for j in i]
         x = [j for i in zip(x_same, x_diff) for j in i]
-        # [(x1 x2)] [(x3 x4)]
-        print len(y)
-        print len(x)
-        print y[:4]
-        print x[0][0].shape
-        print x[0][1].shape
-        print x[1][0].shape
-        print x[1][1].shape
         x1, x2 = zip(*x)
-        print x1[0].shape
-        print x2[0].shape
-        print x1[1].shape
-        print x2[1].shape
-        #print x1[:4]
-        #print x2[:4]
         assert x1[0].shape[0] == x2[0].shape[0]
         assert x1[0].shape[1] == x2[0].shape[1]
         assert len(x1) == len(x2)
@@ -304,7 +290,7 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
     print '... getting the training functions'
     print trainer_type
     train_fn = None
-    if debug_plot:
+    if debug_plot or debug_print:
         if trainer_type == "adadelta":
             train_fn = nnet.get_adadelta_trainer(debug=True)
         elif trainer_type == "adagrad":
@@ -360,10 +346,10 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
                     avg_cost = train_fn(x[0], x[1], y)
                 else:
                     avg_cost = train_fn(x[0], x[1], y, lr)
-                if debug_plot >= 2:
+                if debug_print >= 3:
                     print "cost:", avg_cost[0]
-                    plot_costs(avg_cost[0])
                 if debug_plot >= 2:
+                    plot_costs(avg_cost[0])
                     if not len(avg_params_gradients_updates):
                         avg_params_gradients_updates = avg_cost[1:]
                     else:
@@ -381,7 +367,7 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
                 avg_costs.append(avg_cost[0])
             else:
                 avg_costs.append(avg_cost)
-        if debug_plot:
+        if debug_print >= 2:
             print_mean_weights_biases(nnet.params)
         if debug_plot >= 2:
             plot_params_gradients_updates(epoch, avg_params_gradients_updates)
@@ -475,9 +461,9 @@ if __name__=='__main__':
     debug_on_test_only = False
     if arguments['--debug-test']:
         debug_on_test_only = True
-    debug_print = False
+    debug_print = 0
     if arguments['--debug-print']:
-        debug_print = True
+        debug_print = int(arguments['--debug-print'])
     debug_time = False
     if arguments['--debug-time']:
         debug_time = True
@@ -495,11 +481,11 @@ if __name__=='__main__':
         #layers_sizes=[1024, 1024, 1024],  # TODO in opts
         #dropout_rates=[0.2, 0.3, 0.4, 0.5],  # TODO in opts
         #layers_types=[ReLU, ReLU, ReLU],
-        #layers_sizes=[1024, 1024],  # TODO in opts
-        layers_types=[Linear],
-        layers_sizes=[],  # TODO in opts
-        #layers_types=[ReLU, ReLU],
-        #layers_sizes=[200],  # TODO in opts
+        #layers_sizes=[2400, 2400],  # TODO in opts
+        #layers_types=[Linear],
+        #layers_sizes=[],  # TODO in opts
+        layers_types=[ReLU, ReLU],
+        layers_sizes=[200],  # TODO in opts
         #layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts

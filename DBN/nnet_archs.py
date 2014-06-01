@@ -207,6 +207,7 @@ class DropoutNet(NeuralNet):
 
 
 class ABNeuralNet(object):  #NeuralNet):
+    # TODO refactor
     def __init__(self, numpy_rng, theano_rng=None, 
             n_ins=40*3,
             layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
@@ -280,9 +281,16 @@ class ABNeuralNet(object):  #NeuralNet):
         self.mean_rmse_costs = T.mean(self.rmse_cost)
         self.mean_rsse_costs = T.mean(self.rsse_cost)
 
+        #self.cross_entropy = - (0.5 * T.sum(layer_input1 * T.log(layer_input2)
+        #    + (1 - layer_input1) * T.log(1 - layer_input2), axis=-1)) + (0.5 *
+        #        T.sum(layer_input2 * T.log(layer_input1) + (1 - layer_input2) *
+        #            T.log(1 - layer_input1), axis=-1))
+        #self.cross_entropy_cost = T.switch(self.y, self.cross_entropy,
+        #        -self.cross_entropy)
 
-        self.cos_sim = T.mean(((layer_input1 - layer_input2).norm(2, axis=-1) / 
-                (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))), axis=-1)  # TODO check
+        self.cos_sim = T.mean(((layer_input1 - layer_input2).norm(2, axis=-1) /
+            (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
+            axis=-1)  # TODO check
         self.cos_sim_cost = T.switch(self.y, self.cos_sim, -self.cos_sim)
         self.mean_cos_sim_cost = T.mean(self.cos_sim_cost)
         self.sum_cos_sim_cost = T.sum(self.cos_sim_cost)
@@ -376,3 +384,5 @@ class ABNeuralNet(object):  #NeuralNet):
             return [score(x[0], x[1], y) for (x, y) in given_set]
 
         return scoref
+
+    # TODO DropoutABNet
