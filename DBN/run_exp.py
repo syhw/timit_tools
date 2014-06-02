@@ -214,13 +214,46 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
         print "nframes:", nframes
         train_set_iterator = iterator_type(x1[:-ten_percent], 
                 x2[:-ten_percent], y[:-ten_percent], # TODO
-                nframes=nframes, batch_size=batch_size, margin=True)
+                nframes=nframes, batch_size=batch_size, marginf=3) # TODO margin pass this 3 along before
         valid_set_iterator = iterator_type(x1[-ten_percent:], 
                 x2[-ten_percent:], y[-ten_percent:],  # TODO
-                nframes=nframes, batch_size=batch_size, margin=True)
-        test_set_iterator = iterator_type(x1[-ten_percent:], 
-                x2[-ten_percent:], y[-ten_percent:], # TODO
-                nframes=nframes, batch_size=batch_size, margin=True)
+                nframes=nframes, batch_size=batch_size, marginf=3)
+        #test_set_iterator = iterator_type(x1[-ten_percent:], 
+        #        x2[-ten_percent:], y[-ten_percent:], # TODO
+        #        nframes=nframes, batch_size=batch_size, marginf=3)
+
+        ### TEST SET
+
+        test_dataset_path = "/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/dtw_words_test.joblib"
+        data_same = joblib.load(test_dataset_path)
+        x_arr_same = numpy.r_[numpy.concatenate([e[1] for e in data_same]),
+            numpy.concatenate([e[2] for e in data_same])]
+        print x_arr_same.shape
+        tmp = test_dataset_path.split('/')
+        neg_data_path = "/".join(tmp[:-1]) + "/neg" + tmp[-1][3:]
+        data_diff = joblib.load(neg_data_path)
+        x_arr_diff = numpy.r_[numpy.concatenate([e[0] for e in data_diff]),
+                numpy.concatenate([e[1] for e in data_diff])]
+        print x_arr_diff.shape
+        x_arr_all = numpy.concatenate([x_arr_same, x_arr_diff])
+        mean = numpy.mean(x_arr_all, 0)
+        std = numpy.std(x_arr_all, 0)
+
+        x_same = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
+                for e in data_same]
+        shuffle(x_same)  # in place
+        y_same = [[1 for _ in xrange(len(e[0]))] for i, e in enumerate(x_same)]
+
+        x_diff = [((e[0] - mean) / std, (e[1] - mean) / std)
+                for e in data_diff]
+        shuffle(x_diff)
+        y_diff = [[0 for _ in xrange(len(e[0]))] for i, e in enumerate(x_diff)]
+        y = [j for i in zip(y_same, y_diff) for j in i]
+        x = [j for i in zip(x_same, x_diff) for j in i]
+        x1, x2 = zip(*x)
+        test_set_iterator = iterator_type(x1, x2, y,
+                nframes=nframes, batch_size=batch_size, marginf=3)
+
     else:
         data = load_data(dataset_path, nframes=1, features=features, scaling='normalize', cv_frac='fixed', speakers=False, numpy_array_only=True) 
 
@@ -390,7 +423,7 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
               (epoch, this_validation_loss))
         # if we got the best validation score until now
         if this_validation_loss < best_validation_loss:
-            with open(output_file_name + '.pickle', 'w') as f:
+            with open(output_file_name + '.pickle', 'wb') as f:
                 cPickle.dump(nnet, f)
             # improve patience if loss improvement is good enough
             if (this_validation_loss < best_validation_loss *
@@ -415,7 +448,7 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    with open(output_file_name + '.pickle', 'w') as f:
+    with open(output_file_name + '.pickle', 'wb') as f:
         cPickle.dump(nnet, f)
 
 if __name__=='__main__':
@@ -480,12 +513,12 @@ if __name__=='__main__':
         #layers_types=[ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[1024, 1024, 1024],  # TODO in opts
         #dropout_rates=[0.2, 0.3, 0.4, 0.5],  # TODO in opts
-        #layers_types=[ReLU, ReLU, ReLU],
-        #layers_sizes=[2400, 2400],  # TODO in opts
+        layers_types=[ReLU, ReLU, ReLU],
+        layers_sizes=[2400, 2400],  # TODO in opts
         #layers_types=[Linear],
         #layers_sizes=[],  # TODO in opts
-        layers_types=[ReLU, ReLU],
-        layers_sizes=[200],  # TODO in opts
+        #layers_types=[ReLU, ReLU],
+        #layers_sizes=[200],  # TODO in opts
         #layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts

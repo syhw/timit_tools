@@ -74,7 +74,7 @@ class DatasetBatchIterator(object):
 class DatasetDTWIterator(object):
     """ An iterator on dynamic time warped words of the dataset. """
 
-    def __init__(self, x1, x2, y, nframes=1, batch_size=1, margin=False):
+    def __init__(self, x1, x2, y, nframes=1, batch_size=1, marginf=0):
         # x1 and x2 are tuples or arrays that are [nframes, nfeatures]
         self._x1 = x1
         self._x2 = x2
@@ -84,11 +84,9 @@ class DatasetDTWIterator(object):
             self._y[ii][:] = yy
         self._nframes = nframes
         self._memoized_x = defaultdict(lambda: {})
-        self._margin = 0
         self._nwords = batch_size
-        if margin:
-            # margin says if we pad taking a margin into account
-            self._margin = (self._nframes - 1) / 2
+        self._margin = marginf
+        # marginf says if we pad taking a number of frames as margin
         self._x1_mem = []
         self._x2_mem = []
         self._y_mem = []
@@ -99,9 +97,9 @@ class DatasetDTWIterator(object):
         self._nframes (stacking x1/x2 features for self._nframes), and
         self._nwords (number of words per mini-batch).
         """
-        ii = i/self._nwords
-        if ii < len(self._x1_mem) and ii < len(self._x2_mem):
-            return [[self._x1_mem[ii], self._x2_mem[ii]], self._y_mem[ii]]
+        ind = i/self._nwords
+        if ind < len(self._x1_mem) and ind < len(self._x2_mem):
+            return [[self._x1_mem[ind], self._x2_mem[ind]], self._y_mem[ind]]
 
         nf = self._nframes
         def local_pad(x):
@@ -153,8 +151,7 @@ class DatasetDTWIterator(object):
         self._x1_mem.append(numpy.concatenate(x1_padded))
         self._x2_mem.append(numpy.concatenate(x2_padded))
         self._y_mem.append(numpy.concatenate(y_padded))
-        ii = i/self._nwords
-        return [[self._x1_mem[ii], self._x2_mem[ii]], self._y_mem[ii]]
+        return [[self._x1_mem[ind], self._x2_mem[ind]], self._y_mem[ind]]
 
     def __iter__(self):
         for i in xrange(0, len(self._y), self._nwords):
