@@ -385,4 +385,21 @@ class ABNeuralNet(object):  #NeuralNet):
 
         return scoref
 
+    def transform_x1_x2(self):
+        batch_x1 = T.fmatrix('batch_x1')
+        batch_x2 = T.fmatrix('batch_x2')
+        transform = theano.function(inputs=[theano.Param(batch_x1), 
+            theano.Param(batch_x2)],
+                outputs=[self.layers[-2].output, self.layers[-1].output],
+                givens={self.x1: batch_x1, self.x2: batch_x2})
+        return transform
+
+    def transform_x1(self):
+        batch_x1 = T.fmatrix('batch_x1')
+        transform = theano.function(inputs=[theano.Param(batch_x1)],
+                outputs=self.layers[-2].output,
+                givens={self.x1: batch_x1})
+        return transform
+
     # TODO DropoutABNet
+
