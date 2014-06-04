@@ -19,7 +19,7 @@ class NeuralNet(object):  # TODO refactor with a base class for this and AB
             layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
             layers_sizes=[1024, 1024, 1024, 1024],
             n_outs=62 * 3,
-            rho=0.8, eps=1.5E-7,  # TODO refine
+            rho=0.9, eps=1.E-6,  # TODO refine
             debugprint=False):
         self.layers = []
         self.params = []
@@ -165,6 +165,29 @@ class NeuralNet(object):  # TODO refactor with a base class for this and AB
 
         return scoref
 
+    def fit(self, X, y, max_epochs=30, batch_size=1000):
+        # TODO early stopping
+        train_fn = self.get_adadelta_trainer()
+        #best_validation_loss = numpy.inf
+        epoch = 0
+        X_iter = [X[i*batch_size:(i+1)*batch_size] 
+                for i in xrange((X.shape[0]+batch_size-1)/batch_size)]
+        y_iter = [y[i*batch_size:(i+1)*batch_size] 
+                for i in xrange((y.shape[0]+batch_size-1)/batch_size)]
+        done_looping = False
+        from itertools import izip
+        while (epoch < max_epochs) and (not done_looping):
+            epoch = epoch + 1
+            for iteration, (xx, yy) in enumerate(izip(X_iter, y_iter)):
+                avg_cost = train_fn(xx, yy)
+
+    def predict(self, X):
+        batch_x = T.fmatrix('batch_x')
+        fun = theano.function(inputs=[theano.Param(batch_x)],
+                outputs=self.layers[-1].output,
+                givens={self.x: batch_x})
+        return fun(X)
+
 
 class DropoutNet(NeuralNet):
     def __init__(self, numpy_rng, theano_rng=None, 
@@ -173,7 +196,7 @@ class DropoutNet(NeuralNet):
             layers_sizes=[1024, 1024, 1024, 1024],
             dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],
             n_outs=62 * 3,
-            rho=0.8, eps=1.5E-7,  # TODO refine
+            rho=0.9, eps=1.E-6,  # TODO refine
             debugprint=False):
         super(DropoutNet, self).__init__(numpy_rng, theano_rng, n_ins,
                 layers_types, layers_sizes, n_outs, rho, eps, debugprint)
@@ -291,9 +314,13 @@ class ABNeuralNet(object):  #NeuralNet):
         self.cos_sim = T.mean(((layer_input1 - layer_input2).norm(2, axis=-1) /
             (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
             axis=-1)  # TODO check
-        self.cos_sim_cost = T.switch(self.y, self.cos_sim, -self.cos_sim)
+        self.cos_sim_cost = T.switch(self.y, self.cos_sim, -0.1*self.cos_sim)
         self.mean_cos_sim_cost = T.mean(self.cos_sim_cost)
         self.sum_cos_sim_cost = T.sum(self.cos_sim_cost)
+
+        self.logistic_loss = T.log(1. + T.exp(-10. * self.cos_sim_cost))  # TODO try
+        self.mean_logistic_loss = T.mean(self.logistic_loss)
+        self.sum_logistic_loss = T.sum(self.logistic_loss)
 
         self.cost = self.sum_cos_sim_cost
 

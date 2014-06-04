@@ -25,6 +25,9 @@ def find_triphones(mlf, foldings={}):
                 except IOError:
                     # skip this file if we don't have the fbanks
                     skipfile = True
+                current_file_fbank = current_file.split('.')[0]
+                current_file_fbank = current_file_fbank.split('/')[-2] + "_" +\
+                    current_file_fbank.split('/')[-1]
                 t_minus_2 = None
                 t_minus_1 = None
                 p_minus_2 = None
@@ -64,5 +67,6 @@ if __name__ == '__main__':
         with open(sys.argv[2]) as f:
             foldings = json.load(f)
     l = find_triphones(sys.argv[1], foldings)
-    print "filename onset offset phone context(left-right) talker"
+    print >> sys.stderr, "filename onset offset phone context(left-right) talker"
+    print "#file onset offset #phone context talker"
     print "\n".join(map(lambda x: " ".join(x), l))

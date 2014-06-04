@@ -55,7 +55,7 @@ from random import shuffle
 from prep_timit import load_data
 from dataset_iterators import DatasetSentencesIterator, DatasetBatchIterator
 from dataset_iterators import DatasetDTWIterator
-from layers import Linear, ReLU 
+from layers import Linear, ReLU, SigmoidLayer
 from classifiers import LogisticRegression
 from nnet_archs import NeuralNet, DropoutNet, ABNeuralNet
 
@@ -189,6 +189,7 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
         x_arr_all = numpy.concatenate([x_arr_same, x_arr_diff])
         mean = numpy.mean(x_arr_all, 0)
         std = numpy.std(x_arr_all, 0)
+        numpy.savez("mean_std", mean=mean, std=std)
 
         x_same = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
                 for e in data_same]
@@ -365,6 +366,8 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
     timer = None
     if debug_plot:
         print_mean_weights_biases(nnet.params)
+    #with open(output_file_name + 'epoch_0.pickle', 'wb') as f:
+    #    cPickle.dump(nnet, f)
 
     while (epoch < max_epochs) and (not done_looping):
         epoch = epoch + 1
@@ -412,6 +415,8 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
               (epoch, numpy.mean(train_scoref())))
         # TODO update lr(t) = lr(0) / (1 + lr(0) * lambda * t)
         # or another scheme for learning rate decay
+        #with open(output_file_name + 'epoch_' +str(epoch) + '.pickle', 'wb') as f:
+        #    cPickle.dump(nnet, f)
 
         if debug_on_test_only:
             continue
@@ -448,7 +453,7 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
                           os.path.split(__file__)[1] +
                           ' ran for %.2fm' % ((end_time - start_time)
                                               / 60.))
-    with open(output_file_name + '.pickle', 'wb') as f:
+    with open(output_file_name + '_final.pickle', 'wb') as f:
         cPickle.dump(nnet, f)
 
 if __name__=='__main__':
@@ -509,20 +514,10 @@ if __name__=='__main__':
         nframes=nframes, features=features,
         init_lr=init_lr, max_epochs=max_epochs, 
         network_type=network_type, trainer_type=trainer_type,
-        #layers_types=[Linear, ReLU, ReLU, LogisticRegression],
-        #layers_types=[ReLU, ReLU, ReLU, LogisticRegression],
-        #layers_sizes=[1024, 1024, 1024],  # TODO in opts
-        #dropout_rates=[0.2, 0.3, 0.4, 0.5],  # TODO in opts
-        layers_types=[ReLU, ReLU, ReLU],
-        layers_sizes=[2400, 2400],  # TODO in opts
-        #layers_types=[Linear],
-        #layers_sizes=[],  # TODO in opts
+        layers_types=[ReLU, ReLU, ReLU, ReLU, ReLU],
+        layers_sizes=[1000, 1000, 1000, 1000],  # TODO in opts
         #layers_types=[ReLU, ReLU],
         #layers_sizes=[200],  # TODO in opts
-        #layers_types=[Linear, ReLU, ReLU, ReLU, LogisticRegression],
-        #layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
-        #layers_sizes=[2000, 2000, 2000, 2000],  # TODO in opts
-        #dropout_rates=[0.2, 0.5, 0.5, 0.5, 0.5],  # TODO in opts
         recurrent_connections=[],  # TODO in opts
         prefix_fname=prefix_fname,
         debug_on_test_only=debug_on_test_only,

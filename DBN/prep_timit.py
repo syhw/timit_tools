@@ -341,48 +341,49 @@ def load_data(dataset, nframes=13, features='MFCC', scaling='normalize',
               'speakers?': speakers}
     with open('prep_' + dataset_name + '_params.json', 'w') as f:
         f.write(json.dumps(params))
+    suffix = scaling
+    if speakers:
+        suffix += "_spkr"
 
     def prep_and_serialize():
         [train_x, train_y, test_x, test_y, dev_x, dev_y] = prep_data(dataset, 
                 nframes=nframes, features=features, scaling=scaling,
                 pca_whiten=pca_whiten, dataset_name=dataset_name,
                 speakers=speakers, dev=(cv_frac=='fixed'))
-        suffix = scaling
-        if speakers:
-            suffix += "_spkr"
-        with open(prefix_path + 'train_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'w') as f:
+        with open(prefix_path + 'train_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'wb') as f:
             np.save(f, train_x)
-        with open(prefix_path + 'train_y_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'w') as f:
+        with open(prefix_path + 'train_y_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'wb') as f:
             np.save(f, train_y)
-        with open(prefix_path + 'test_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'w') as f:
+        with open(prefix_path + 'test_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'wb') as f:
             np.save(f, test_x)
-        with open(prefix_path + 'test_y_' + dataset_name + '_' + features + str(nframes) + suffix +'.npy', 'w') as f:
+        with open(prefix_path + 'test_y_' + dataset_name + '_' + features + str(nframes) + suffix +'.npy', 'wb') as f:
             np.save(f, test_y)
         if dev_x != None:
-            with open(prefix_path + 'dev_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'w') as f:
+            with open(prefix_path + 'dev_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'wb') as f:
                 np.save(f, dev_x)
         if dev_y != None:
-            with open(prefix_path + 'dev_y_' + dataset_name + '_' + features + str(nframes) + suffix +'.npy', 'w') as f:
+            with open(prefix_path + 'dev_y_' + dataset_name + '_' + features + str(nframes) + suffix +'.npy', 'wb') as f:
                 np.save(f, dev_y)
         print ">>> Serialized all train/test tables"
         return [train_x, train_y, test_x, test_y, dev_x, dev_y]
 
     if USE_CACHING:
         try: # try to load from serialized filed, beware
-            with open(prefix_path + 'train_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy') as f:
+            with open(prefix_path + 'train_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'rb') as f:
                 train_x = np.load(f)
-            with open(prefix_path + 'train_y_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy') as f:
+            with open(prefix_path + 'train_y_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'rb') as f:
                 train_y = np.load(f)
-            with open(prefix_path + 'test_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy') as f:
+            with open(prefix_path + 'test_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'rb') as f:
                 test_x = np.load(f)
-            with open(prefix_path + 'test_y_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy') as f:
+            with open(prefix_path + 'test_y_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'rb') as f:
                 test_y = np.load(f)
             if cv_frac == 'fixed':
-                with open(prefix_path + 'dev_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy') as f:
+                with open(prefix_path + 'dev_x_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'rb') as f:
                     dev_x = np.load(f)
-                with open(prefix_path + 'dev_y_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy') as f:
+                with open(prefix_path + 'dev_y_' + dataset_name + '_' + features + str(nframes) + suffix + '.npy', 'rb') as f:
                     dev_y = np.load(f)
         except: # do the whole preparation (normalization / padding)
+            print "doing the preparation because no serialized data found"
             [train_x, train_y, test_x, test_y, dev_x, dev_y] = prep_and_serialize()
     else:
         [train_x, train_y, test_x, test_y, dev_x, dev_y] = prep_and_serialize()
