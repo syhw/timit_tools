@@ -292,9 +292,9 @@ class ABNeuralNet(object):  #NeuralNet):
             L1 += T.sum(abs(param))
 
         self.squared_error = (layer_input1 - layer_input2).norm(2, axis=-1) **2
-        self.mse = T.mean(self.squared_error)
+        self.mse = T.mean(self.squared_error, axis=-1)
         self.rmse = T.sqrt(self.mse)
-        self.sse = T.sum(self.squared_error)
+        self.sse = T.sum(self.squared_error, axis=-1)
         self.rsse = T.sqrt(self.sse)
 
         self.rsse_cost = T.switch(self.y, self.rsse, -self.rsse)
@@ -311,16 +311,15 @@ class ABNeuralNet(object):  #NeuralNet):
         #self.cross_entropy_cost = T.switch(self.y, self.cross_entropy,
         #        -self.cross_entropy)
 
-        self.cos_sim = T.mean(((layer_input1 - layer_input2).norm(2, axis=-1) /
+        self.cos_sim = T.mean(-T.arccos((layer_input1 - layer_input2).norm(2, axis=-1) /
             (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
             axis=-1)  # TODO check
-        self.cos_sim_cost = T.switch(self.y, self.cos_sim, -0.1*self.cos_sim)
+        #self.cos_sim = T.mean(((layer_input1 - layer_input2).norm(2, axis=-1) /
+        #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
+        #    axis=-1)  # TODO check
+        self.cos_sim_cost = T.switch(self.y, self.cos_sim, -self.cos_sim)
         self.mean_cos_sim_cost = T.mean(self.cos_sim_cost)
         self.sum_cos_sim_cost = T.sum(self.cos_sim_cost)
-
-        self.logistic_loss = T.log(1. + T.exp(-10. * self.cos_sim_cost))  # TODO try
-        self.mean_logistic_loss = T.mean(self.logistic_loss)
-        self.sum_logistic_loss = T.sum(self.logistic_loss)
 
         self.cost = self.sum_cos_sim_cost
 

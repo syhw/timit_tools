@@ -50,6 +50,7 @@ import numpy
 import prettyplotlib as ppl
 import matplotlib.pyplot as plt
 import joblib
+import random
 from random import shuffle
 
 from prep_timit import load_data
@@ -65,6 +66,8 @@ if socket.gethostname() == "syhws-MacBook-Pro.local":
 elif socket.gethostname() == "TODO":  # TODO
     DEFAULT_DATASET = '/media/bigdata/TIMIT_train_dev_test'
 DEBUG = False
+
+OLD_DTW_DATA = False
 
 
 def print_mean_weights_biases(params):
@@ -161,47 +164,139 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
     print "loading dataset from", dataset_path
      # TODO DO A FUNCTION
     if dataset_path[-7:] == '.joblib':
-        # TODO clean
-        data_same = joblib.load(dataset_path)
-        #data_same = [(word_label, fbanks1, fbanks2, DTW_cost, DTW_1to2, DTW_2to1)]
-        if debug_print:
-            # some stats on the DTW
-            dtw_costs = zip(*data_same)[3]
-            words_frames = numpy.asarray([fb.shape[0] for fb in zip(*data_same)[1]])
-            print "mean DTW cost", numpy.mean(dtw_costs), "std dev", numpy.std(dtw_costs)
-            print "mean word length in frames", numpy.mean(words_frames), "std dev", numpy.std(words_frames)
-            print "mean DTW cost per frame", numpy.mean(dtw_costs/words_frames), "std dev", numpy.std(dtw_costs/words_frames)
-            # /some stats on the DTW
-        # TODO maybe ceil on the DTW cost to be considered "same"
+        if OLD_DTW_DATA:
+            data_same = joblib.load(dataset_path)
+            #data_same = [(word_label, fbanks1, fbanks2, DTW_cost, DTW_1to2, DTW_2to1)]
+            if debug_print:
+                # some stats on the DTW
+                dtw_costs = zip(*data_same)[3]
+                words_frames = numpy.asarray([fb.shape[0] for fb in zip(*data_same)[1]])
+                print "mean DTW cost", numpy.mean(dtw_costs), "std dev", numpy.std(dtw_costs)
+                print "mean word length in frames", numpy.mean(words_frames), "std dev", numpy.std(words_frames)
+                print "mean DTW cost per frame", numpy.mean(dtw_costs/words_frames), "std dev", numpy.std(dtw_costs/words_frames)
+                # /some stats on the DTW
+            # TODO maybe ceil on the DTW cost to be considered "same"
 
-        x_arr_same = numpy.r_[numpy.concatenate([e[1] for e in data_same]),
-            numpy.concatenate([e[2] for e in data_same])]
-        print x_arr_same.shape
+            x_arr_same = numpy.r_[numpy.concatenate([e[1] for e in data_same]),
+                numpy.concatenate([e[2] for e in data_same])]
+            print x_arr_same.shape
 
-        # we need about as much negative examples as positive ones
-        # TODO wrap this in try except or if
-        tmp = dataset_path.split('/')
-        neg_data_path = "/".join(tmp[:-1]) + "/neg" + tmp[-1][3:]
-        data_diff = joblib.load(neg_data_path)
-        x_arr_diff = numpy.r_[numpy.concatenate([e[0] for e in data_diff]),
-                numpy.concatenate([e[1] for e in data_diff])]
-        print x_arr_diff.shape
-        x_arr_all = numpy.concatenate([x_arr_same, x_arr_diff])
-        mean = numpy.mean(x_arr_all, 0)
-        std = numpy.std(x_arr_all, 0)
-        numpy.savez("mean_std", mean=mean, std=std)
+            # we need about as much negative examples as positive ones
+            # TODO wrap this in try except or if
+            tmp = dataset_path.split('/')
+            neg_data_path = "/".join(tmp[:-1]) + "/neg" + tmp[-1][3:]
+            data_diff = joblib.load(neg_data_path)
+            x_arr_diff = numpy.r_[numpy.concatenate([e[0] for e in data_diff]),
+                    numpy.concatenate([e[1] for e in data_diff])]
+            print x_arr_diff.shape
+            x_arr_all = numpy.concatenate([x_arr_same, x_arr_diff])
+            mean = numpy.mean(x_arr_all, 0)
+            std = numpy.std(x_arr_all, 0)
+            numpy.savez("mean_std", mean=mean, std=std)
 
-        x_same = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
-                for e in data_same]
-        shuffle(x_same)  # in place
-        y_same = [[1 for _ in xrange(len(e[0]))] for i, e in enumerate(x_same)]
+            x_same = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
+                    for e in data_same]
+            shuffle(x_same)  # in place
+            y_same = [[1 for _ in xrange(len(e[0]))] for i, e in enumerate(x_same)]
 
-        x_diff = [((e[0] - mean) / std, (e[1] - mean) / std)
-                for e in data_diff]
-        shuffle(x_diff)
-        y_diff = [[0 for _ in xrange(len(e[0]))] for i, e in enumerate(x_diff)]
-        y = [j for i in zip(y_same, y_diff) for j in i]
-        x = [j for i in zip(x_same, x_diff) for j in i]
+            x_diff = [((e[0] - mean) / std, (e[1] - mean) / std)
+                    for e in data_diff]
+            shuffle(x_diff)
+            y_diff = [[0 for _ in xrange(len(e[0]))] for i, e in enumerate(x_diff)]
+            y = [j for i in zip(y_same, y_diff) for j in i]
+            x = [j for i in zip(x_same, x_diff) for j in i]
+
+        else:
+            data_same = joblib.load(dataset_path)
+            #data_same = [(word_label, talker1, talker2, fbanks1, fbanks2, DTW_cost, DTW_1to2, DTW_2to1)]
+            if debug_print:
+                # some stats on the DTW
+                dtw_costs = zip(*data_same)[5]
+                words_frames = numpy.asarray([fb.shape[0] for fb in zip(*data_same)[3]])
+                print "mean DTW cost", numpy.mean(dtw_costs), "std dev", numpy.std(dtw_costs)
+                print "mean word length in frames", numpy.mean(words_frames), "std dev", numpy.std(words_frames)
+                print "mean DTW cost per frame", numpy.mean(dtw_costs/words_frames), "std dev", numpy.std(dtw_costs/words_frames)
+            x_arr_same = numpy.r_[numpy.concatenate([e[3] for e in data_same]),
+                numpy.concatenate([e[4] for e in data_same])]
+            print x_arr_same.shape
+
+            # generate data_diff:
+#            spkr_words = {}
+            same_spkr = 0
+            for i, tup in enumerate(data_same):
+#                spkr_words[tup[1]].append((i, 0))
+#                spkr_words[tup[2]].append((i, 1))
+                if tup[1] == tup[2]:
+                    same_spkr += 1
+#            to_del = []
+#            for spkr, words in spkr_words.iteritems():
+#                if len(words) < 2:
+#                    to_del.append(spkr)
+#            print "to del len:", len(to_del)
+#            for td in to_del:
+#                del spkr_words[td]
+            ratio = same_spkr * 1. / len(data_same)
+            print "ratio same spkr / all for same:", ratio
+            data_diff = []
+#            keys = spkr_words.keys()
+#            lkeys = len(keys) - 1
+            ldata_same = len(data_same)-1
+            same_spkr_diff = 0
+            for i in xrange(len(data_same)):
+                word_1 = random.randint(0, ldata_same)
+                word_1_type = data_same[word_1][0]
+                word_2 = random.randint(0, ldata_same)
+                while data_same[word_2][0] == word_1_type:
+                    word_2 = random.randint(0, ldata_same)
+
+                wt1 = random.randint(0, 1)
+                wt2 = random.randint(0, 1)
+                if data_same[word_1][1+wt1] == data_same[word_2][1+wt2]:
+                    same_spkr_diff += 1
+                pair = (data_same[word_1][3+wt1], data_same[word_2][3+wt2])
+                data_diff.append(pair)
+
+#                first_spkr = random.randint(0, lkeys)
+#                possible_word_1 = spkr_words[keys[first_spkr]]
+#                first_word = random.randint(0, len(possible_word_1) - 1)
+#                if random.random() < ratio:
+#                    # pick 2 different words same speaker
+#                    second_word = random.randint(0, len(possible_word_1) - 1)
+#                    while second_word == first_word:
+#                        second_word = random.randint(0, len(possible_word_1) - 1)
+#                    word1 = possible_word_1[first_word]
+#                    word2 = possible_word_1[second_word]
+#                    data_diff.append((data_same[
+#                else:
+#                    second_spkr = random.randint(0, lkeys)
+#                    while second_spkr == first_spkr:
+#                        second_spkr = random.randint(0, lkeys)
+#                    possible_words = spkr_words[keys[first_spkr]]
+#                    # pick 2 different words diff speakers
+
+            ratio = same_spkr_diff * 1. / len(data_diff)
+            print "ratio same spkr / all for diff:", ratio
+
+            x_arr_diff = numpy.r_[numpy.concatenate([e[0] for e in data_diff]),
+                    numpy.concatenate([e[1] for e in data_diff])]
+            print x_arr_diff.shape
+
+            x_arr_all = numpy.concatenate([x_arr_same, x_arr_diff])
+            mean = numpy.mean(x_arr_all, 0)
+            std = numpy.std(x_arr_all, 0)
+            numpy.savez("mean_std_2", mean=mean, std=std)
+
+            x_same = [((e[3][e[-2]] - mean) / std, (e[4][e[-1]] - mean) / std)
+                    for e in data_same]
+            shuffle(x_same)  # in place
+            y_same = [[1 for _ in xrange(len(e[0]))] for i, e in enumerate(x_same)]
+            x_diff = [((e[0] - mean) / std, (e[1] - mean) / std)
+                    for e in data_diff]
+            #shuffle(x_diff)
+            y_diff = [[0 for _ in xrange(len(e[0]))] for i, e in enumerate(x_diff)]
+            y = [j for i in zip(y_same, y_diff) for j in i]
+            x = [j for i in zip(x_same, x_diff) for j in i]
+
         x1, x2 = zip(*x)
         assert x1[0].shape[0] == x2[0].shape[0]
         assert x1[0].shape[1] == x2[0].shape[1]
@@ -219,41 +314,54 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
         valid_set_iterator = iterator_type(x1[-ten_percent:], 
                 x2[-ten_percent:], y[-ten_percent:],  # TODO
                 nframes=nframes, batch_size=batch_size, marginf=3)
-        #test_set_iterator = iterator_type(x1[-ten_percent:], 
-        #        x2[-ten_percent:], y[-ten_percent:], # TODO
-        #        nframes=nframes, batch_size=batch_size, marginf=3)
 
         ### TEST SET
 
-        test_dataset_path = "/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/dtw_words_test.joblib"
-        data_same = joblib.load(test_dataset_path)
-        x_arr_same = numpy.r_[numpy.concatenate([e[1] for e in data_same]),
-            numpy.concatenate([e[2] for e in data_same])]
-        print x_arr_same.shape
-        tmp = test_dataset_path.split('/')
-        neg_data_path = "/".join(tmp[:-1]) + "/neg" + tmp[-1][3:]
-        data_diff = joblib.load(neg_data_path)
-        x_arr_diff = numpy.r_[numpy.concatenate([e[0] for e in data_diff]),
-                numpy.concatenate([e[1] for e in data_diff])]
-        print x_arr_diff.shape
-        x_arr_all = numpy.concatenate([x_arr_same, x_arr_diff])
-        mean = numpy.mean(x_arr_all, 0)
-        std = numpy.std(x_arr_all, 0)
+        if OLD_DTW_DATA:
+            test_dataset_path = "/fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/dtw_words_test.joblib"
+            data_same = joblib.load(test_dataset_path)
+            x_arr_same = numpy.r_[numpy.concatenate([e[1] for e in data_same]),
+                numpy.concatenate([e[2] for e in data_same])]
+            print x_arr_same.shape
+            tmp = test_dataset_path.split('/')
+            neg_data_path = "/".join(tmp[:-1]) + "/neg" + tmp[-1][3:]
+            data_diff = joblib.load(neg_data_path)
+            x_arr_diff = numpy.r_[numpy.concatenate([e[0] for e in data_diff]),
+                    numpy.concatenate([e[1] for e in data_diff])]
+            print x_arr_diff.shape
+            x_arr_all = numpy.concatenate([x_arr_same, x_arr_diff])
+            mean = numpy.mean(x_arr_all, 0)
+            std = numpy.std(x_arr_all, 0)
 
-        x_same = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
-                for e in data_same]
-        shuffle(x_same)  # in place
-        y_same = [[1 for _ in xrange(len(e[0]))] for i, e in enumerate(x_same)]
+            x_same = [((e[1][e[-2]] - mean) / std, (e[2][e[-1]] - mean) / std)
+                    for e in data_same]
+            shuffle(x_same)  # in place
+            y_same = [[1 for _ in xrange(len(e[0]))] for i, e in enumerate(x_same)]
 
-        x_diff = [((e[0] - mean) / std, (e[1] - mean) / std)
-                for e in data_diff]
-        shuffle(x_diff)
-        y_diff = [[0 for _ in xrange(len(e[0]))] for i, e in enumerate(x_diff)]
-        y = [j for i in zip(y_same, y_diff) for j in i]
-        x = [j for i in zip(x_same, x_diff) for j in i]
+            x_diff = [((e[0] - mean) / std, (e[1] - mean) / std)
+                    for e in data_diff]
+            shuffle(x_diff)
+            y_diff = [[0 for _ in xrange(len(e[0]))] for i, e in enumerate(x_diff)]
+            y = [j for i in zip(y_same, y_diff) for j in i]
+            x = [j for i in zip(x_same, x_diff) for j in i]
+            
+        else:
+            test_dataset_path = "./dtw_words_2_dev.joblib"
+            data_same = joblib.load(test_dataset_path)
+            # DO ONLY SAME
+            x_arr_same = numpy.r_[numpy.concatenate([e[3] for e in data_same]),
+                numpy.concatenate([e[4] for e in data_same])]
+            print x_arr_same.shape
+            x_same = [((e[3][e[-2]] - mean) / std, (e[4][e[-1]] - mean) / std)
+                    for e in data_same]
+            shuffle(x_same)  # in place
+            y_same = [[1 for _ in xrange(len(e[0]))] for i, e in enumerate(x_same)]
+            x = x_same
+            y = y_same
+
         x1, x2 = zip(*x)
         test_set_iterator = iterator_type(x1, x2, y,
-                nframes=nframes, batch_size=batch_size, marginf=3)
+            nframes=nframes, batch_size=batch_size, marginf=3)
 
     else:
         data = load_data(dataset_path, nframes=1, features=features, scaling='normalize', cv_frac='fixed', speakers=False, numpy_array_only=True) 
@@ -514,10 +622,10 @@ if __name__=='__main__':
         nframes=nframes, features=features,
         init_lr=init_lr, max_epochs=max_epochs, 
         network_type=network_type, trainer_type=trainer_type,
-        layers_types=[ReLU, ReLU, ReLU, ReLU, ReLU],
-        layers_sizes=[1000, 1000, 1000, 1000],  # TODO in opts
-        #layers_types=[ReLU, ReLU],
-        #layers_sizes=[200],  # TODO in opts
+        #layers_types=[ReLU, ReLU, ReLU, ReLU, ReLU],
+        #layers_sizes=[1000, 1000, 1000, 1000],  # TODO in opts
+        layers_types=[ReLU, ReLU],
+        layers_sizes=[200],  # TODO in opts
         recurrent_connections=[],  # TODO in opts
         prefix_fname=prefix_fname,
         debug_on_test_only=debug_on_test_only,
