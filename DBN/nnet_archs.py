@@ -311,13 +311,20 @@ class ABNeuralNet(object):  #NeuralNet):
         #self.cross_entropy_cost = T.switch(self.y, self.cross_entropy,
         #        -self.cross_entropy)
 
-        self.cos_sim = T.mean(-T.arccos((layer_input1 - layer_input2).norm(2, axis=-1) /
-            (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
-            axis=-1)  # TODO check
+        #self.cos_sim = T.mean(-T.arccos((layer_input1 - layer_input2).norm(2, axis=-1) /
+        #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
+        #    axis=-1)  # TODO check
         #self.cos_sim = T.mean(((layer_input1 - layer_input2).norm(2, axis=-1) /
         #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
         #    axis=-1)  # TODO check
-        self.cos_sim_cost = T.switch(self.y, self.cos_sim, -self.cos_sim)
+        #self.cos_sim = (T.batched_dot(layer_input1, layer_input2) /
+        #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1)))
+        self.cos_sim = (T.batched_dot(layer_input1, layer_input2) /
+            (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1)))
+        #self.cos_sim = T.mean(-T.arccos(T.batched_dot(layer_input1, layer_input2) /
+        #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
+        #    axis=-1)  # TODO check
+        self.cos_sim_cost = T.switch(self.y, -self.cos_sim, self.cos_sim)
         self.mean_cos_sim_cost = T.mean(self.cos_sim_cost)
         self.sum_cos_sim_cost = T.sum(self.cos_sim_cost)
 
