@@ -319,8 +319,9 @@ class ABNeuralNet(object):  #NeuralNet):
         #    axis=-1)  # TODO check
         #self.cos_sim = (T.batched_dot(layer_input1, layer_input2) /
         #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1)))
-        self.cos_sim = (T.batched_dot(layer_input1, layer_input2) /
-            (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1)))
+        self.cos_sim = T.mean((T.batched_dot(layer_input1, layer_input2) /
+            (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
+            axis=-1)
         #self.cos_sim = T.mean(-T.arccos(T.batched_dot(layer_input1, layer_input2) /
         #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
         #    axis=-1)  # TODO check
