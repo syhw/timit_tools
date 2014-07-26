@@ -311,23 +311,20 @@ class ABNeuralNet(object):  #NeuralNet):
         #self.cross_entropy_cost = T.switch(self.y, self.cross_entropy,
         #        -self.cross_entropy)
 
-        #self.cos_sim = T.mean(-T.arccos((layer_input1 - layer_input2).norm(2, axis=-1) /
-        #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
-        #    axis=-1)  # TODO check
-        #self.cos_sim = T.mean(((layer_input1 - layer_input2).norm(2, axis=-1) /
-        #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
-        #    axis=-1)  # TODO check
         #self.cos_sim = (T.batched_dot(layer_input1, layer_input2) /
-        #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1)))
-        self.cos_sim = T.mean((T.batched_dot(layer_input1, layer_input2) /
-            (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
-            axis=-1)
-        #self.cos_sim = T.mean(-T.arccos(T.batched_dot(layer_input1, layer_input2) /
-        #    (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1))),
-        #    axis=-1)  # TODO check
-        self.cos_sim_cost = T.switch(self.y, -self.cos_sim, self.cos_sim)
+        self.cos_sim = (T.sum(layer_input1 * layer_input2, axis=-1) /
+            (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1)))
+        #self.cos_sim_cost = T.switch(self.y, 1.-self.cos_sim, self.cos_sim)
+        #self.cos_sim_cost = T.switch(self.y, 1.-abs(self.cos_sim), abs(self.cos_sim))
+        #self.cos_sim_cost = T.switch(self.y, 1.-(self.cos_sim ** 2), self.cos_sim ** 2)
+        self.cos_sim_cost = T.switch(self.y, (1.-self.cos_sim)/2, self.cos_sim ** 2)
         self.mean_cos_sim_cost = T.mean(self.cos_sim_cost)
         self.sum_cos_sim_cost = T.sum(self.cos_sim_cost)
+
+        self.normalized_euclidean = ((layer_input1 - layer_input2).norm(2, axis=-1) / (layer_input1.norm(2, axis=-1) * layer_input2.norm(2, axis=-1)))
+        self.normalized_euclidean_cost = T.switch(self.y, self.normalized_euclidean, -self.normalized_euclidean)
+        self.mean_normalized_euclidean_cost = T.mean(self.normalized_euclidean_cost)
+        self.sum_normalized_euclidean_cost = T.sum(self.normalized_euclidean_cost)
 
         self.cost = self.sum_cos_sim_cost
 
@@ -384,6 +381,9 @@ class ABNeuralNet(object):  #NeuralNet):
         for accugrad, accudelta, param, gparam in zip(self._accugrads,
                 self._accudeltas, self.params, gparams):
             # c.f. Algorithm 1 in the Adadelta paper (Zeiler 2012)
+            #gp = gparam.clip(-1./self._eps, 1./self._eps)
+            #agrad = self._rho * accugrad + (1 - self._rho) * gp * gp
+            #dx = - T.sqrt((accudelta + self._eps) / (agrad + self._eps)) * gp
             agrad = self._rho * accugrad + (1 - self._rho) * gparam * gparam
             dx = - T.sqrt((accudelta + self._eps) / (agrad + self._eps)) * gparam
             updates[accudelta] = self._rho * accudelta + (1 - self._rho) * dx * dx
@@ -393,7 +393,11 @@ class ABNeuralNet(object):  #NeuralNet):
         outputs = cost
         if debug:
             outputs = [cost] + self.params + gparams +\
-                    [updates[param] for param in self.params]
+                    [updates[param] for param in self.params]# +\
+                    #[self.x1] +\
+                    #[self.x2] +\
+                    #[self.y] +\
+                    #[self.cost]
 
         train_fn = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y)],
@@ -404,13 +408,33 @@ class ABNeuralNet(object):  #NeuralNet):
         return train_fn
 
     def score_classif(self, given_set):
-        """ returns means MSEs """  # TODO change this error function
         batch_x1 = T.fmatrix('batch_x1')
         batch_x2 = T.fmatrix('batch_x2')
         batch_y = T.ivector('batch_y')
         score = theano.function(inputs=[theano.Param(batch_x1), 
             theano.Param(batch_x2), theano.Param(batch_y)],
                 outputs=self.cost,
+                givens={self.x1: batch_x1, self.x2: batch_x2, self.y: batch_y})
+
+        # Create a function that scans the entire set given as input
+        def scoref():
+            return [score(x[0], x[1], y) for (x, y) in given_set]
+
+        return scoref
+
+    def score_classif_same_diff_separated(self, given_set):
+        batch_x1 = T.fmatrix('batch_x1')
+        batch_x2 = T.fmatrix('batch_x2')
+        batch_y = T.ivector('batch_y')
+        #cost_same = T.mean(self.normalized_euclidean[T.eq(self.y, 1).nonzero()], axis=-1)
+        #cost_diff = T.mean(1. - self.normalized_euclidean[T.eq(self.y, 0).nonzero()], axis=-1)
+        cost_same = T.mean(self.cos_sim[T.eq(self.y, 1).nonzero()], axis=-1)
+        #cost_diff = T.mean(1. - self.cos_sim[T.eq(self.y, 0).nonzero()], axis=-1)
+        cost_diff = T.mean(self.cos_sim[T.eq(self.y, 0).nonzero()], axis=-1)
+        score = theano.function(inputs=[theano.Param(batch_x1), 
+            theano.Param(batch_x2), theano.Param(batch_y)],
+                outputs=[cost_same, cost_diff],
+                #outputs=self.cost,
                 givens={self.x1: batch_x1, self.x2: batch_x2, self.y: batch_y})
 
         # Create a function that scans the entire set given as input

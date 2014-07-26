@@ -303,7 +303,7 @@ class DatasetDTReWIterator(DatasetDTWIterator):
         data_same_01shapes = self._data_same[0][1].shape
         print data_same_00shapes
         print data_same_01shapes
-        self._margin = 0
+        self._margin = 0  # TODO CORRECT THAT IF NEEDED
         self.remix()
 
 

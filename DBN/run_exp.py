@@ -249,6 +249,9 @@ def run(dataset_path=DEFAULT_DATASET, dataset_name='timit',
     #            spkr_words = {}
                 same_spkr = 0
                 for i, tup in enumerate(data_same):
+                    print "TUP:", tup
+                    print "TUP 1:", tup[1]
+                    print "TUP 2:", tup[2]
     #                spkr_words[tup[1]].append((i, 0))
     #                spkr_words[tup[2]].append((i, 1))
                     if tup[1] == tup[2]:
@@ -643,12 +646,14 @@ if __name__=='__main__':
         nframes=nframes, features=features,
         init_lr=init_lr, max_epochs=max_epochs, 
         network_type=network_type, trainer_type=trainer_type,
-        #layers_types=[ReLU, ReLU, ReLU, ReLU, ReLU],
+        #layers_types=[ReLU, ReLU, ReLU, ReLU, LogisticRegression],
         #layers_sizes=[1000, 1000, 1000, 1000],  # TODO in opts
         #layers_types=[ReLU, LogisticRegression],
         #layers_sizes=[200],  # TODO in opts
-        layers_types=[ReLU, ReLU],
-        layers_sizes=[200],  # TODO in opts
+        layers_types=[ReLU],
+        layers_sizes=[],
+        #layers_types=[ReLU, ReLU],
+        #layers_sizes=[200],  # TODO in opts
         recurrent_connections=[],  # TODO in opts
         prefix_fname=prefix_fname,
         debug_on_test_only=debug_on_test_only,
