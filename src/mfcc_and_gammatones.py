@@ -90,7 +90,7 @@ def process(folder,
     if filterbanks:
         try:
             sys.path.append('../spectral')
-            from spectral import Mel
+            from spectral import Spectral
         except ImportError:
             print >> sys.stderr, "You need spectral (in the parent folder)"
             print >> sys.stderr, "https://github.com/mwv/spectral"
@@ -137,14 +137,15 @@ def process(folder,
             if filterbanks:
                 # convert to Mel filterbanks
                 if fbanks == None: # assume parameters are fixed
-                    fbanks = Mel(nfilt=N_FBANKS,    # nb of filters in mel bank
+                    fbanks = Spectral(nfilt=N_FBANKS,    # nb of filters in mel bank
                                  alpha=0.97,             # pre-emphasis
+                                 do_dct=False,           # we do not want MFCCs
                                  fs=srate,               # sampling rate
                                  frate=FBANKS_RATE,      # frame rate
                                  wlen=FBANKS_WINDOW,     # window length
                                  nfft=1024,              # length of dft
-                                 mel_deltas=False,       # speed
-                                 mel_deltasdeltas=False  # acceleration
+                                 do_deltas=False,       # speed
+                                 do_deltasdeltas=False  # acceleration
                                  )
                 fbank = fbanks.transform(sound)[0]  # first dimension is for
                                                     # deltas & deltasdeltas
