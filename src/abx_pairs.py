@@ -1,15 +1,15 @@
 """ Takes an MLF as input and gives triphones in the *.items ABX format as output.
 
-python src/do_abx_pairs.py aligned.mlf [foldings.json]
+python src/abx_pairs.py aligned.mlf [foldings.json]
 
 e.g.:
-python src/do_abx_pairs.py /fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/aligned_train.mlf timit_foldings.json
+python src/abx_pairs.py /fhgfs/bootphon/scratch/gsynnaeve/TIMIT/train_dev_test_split/aligned_train.mlf timit_foldings.json
 """
 
 # currently tested only for TIMIT
 import sys, json
 
-def find_triphones(mlf, foldings={}):
+def find_triphones(mlf, foldings={}, triphones_mode=True):
     ret = []
     current_file = None
     with open(mlf) as f:
@@ -48,8 +48,12 @@ def find_triphones(mlf, foldings={}):
                     if p in foldings:
                         p = foldings[p]
                     if t_minus_2 is not None and p_minus_2 is not None:
-                        ret.append([current_file_fbank, t_minus_2[0], t[1], 
-                            p_minus_1, p_minus_2 + "-" + p, current_talker])
+                        if triphones_mode:
+                            ret.append([current_file_fbank, t_minus_2[0], t[1], 
+                                p_minus_1, p_minus_2 + "-" + p, current_talker])
+                        else:
+                            ret.append([current_file_fbank, t_minus_1[0], t_minus_1[1], 
+                                p_minus_1, p_minus_2 + "-" + p, current_talker])
                     p_minus_2 = p_minus_1
                     p_minus_1 = p
                     t_minus_2 = t_minus_1
@@ -66,7 +70,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 2:
         with open(sys.argv[2]) as f:
             foldings = json.load(f)
-    l = find_triphones(sys.argv[1], foldings)
+    l = find_triphones(sys.argv[1], foldings, False)
     print >> sys.stderr, "filename onset offset phone context(left-right) talker"
     print "#file onset offset #phone context talker"
     print "\n".join(map(lambda x: " ".join(x), l))
